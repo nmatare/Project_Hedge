@@ -58,7 +58,8 @@ raw$SP500 <- sp[,2] #append S&P 500 to vector list
 data <- data.frame(apply(raw[,-1], MARGIN=2, log)) #convert to log prices
 data$Date <- as.character(dates)
 
-rtrn <- data.frame(apply(raw[,-1], MARGIN=2, diff)) #take difference of log prices
+
+rtrn <- data.frame(apply(data[,-dim(data)[2]], MARGIN=2, diff)) #take difference of log prices
 rtrn$Date <- as.character(dates[-1])
 
 ###
@@ -101,17 +102,27 @@ for(n in 1:L){
 
 }
 
-stopCluster()
+stopCluster(cl)
 
+setwd(datdir)
+write.csv(timevarcor, file = "varying-corr.csv")
+timevarcor <- as.matrix(read.csv("varying-corr.csv"))
 
+#Find top 10 correlated secruities #[,-1] removes date column
+top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
+top10rtrn <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) head(sort(x, decreasing=TRUE),10)))
 
+#Compare returns against SP&500 Returns
+eval <- data.frame(Date=sp$Date[-1])
+eval$SP500 <- rtrn[,474]
+eval$benchmark <- NA
 
+for(i in 1:L){
 
+	calc <- mean(top10rtrn[i]) #equally weighted
+	eval$benchmark[i] <- calc
+}
 
-#plot and show time varying correlation
-plot(dcc, which=4)
-corrmatrix <- rcor(dcc, type="R")
-corrmatrix <- zoo(r1[1,2,], order.by=as.Date(rownames(moddata)))
 
 
 
