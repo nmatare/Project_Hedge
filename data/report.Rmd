@@ -1,0 +1,763 @@
+
+---
+title: Mimicing S&P 500 Returns via eGARCH and DCC models
+author:
+  - name: Nathan Matare
+
+
+address:
+  - code: 
+    address: The University of Chicago Booth School of Business
+  - code: Another University
+    address: nmatare@chicagobooth.edu
+    
+abstract: |
+  Create a portfolio that best mimics the monthly returns of the S&P 500 Index over the past 10 years and does not hold more than 10 securities at any one time. Securities may consist of individual company stocks and not funds or any other type of investment vehicle.
+
+output: rticles::elsevier_article
+---
+
+```{r setup, include=FALSE, cache=FALSE}
+
+rm(list=ls(all=TRUE))
+options("width"=200)
+options(scipen=999)
+options(digits=4)
+wkdir <- "/home/johnconnor/projecthedge/"
+lbdir <- "/home/johnconnor/projecthedge/lib/"
+datdir <- "/home/johnconnor/projecthedge/data/"
+
+##Set Parameters
+enddate <- Sys.Date()
+startdate <- enddate - 365*10 #appox 10 years of data, not counting trading days
+
+#Load required libraries & utility scripts
+setwd(lbdir)
+library(Quandl)
+library(zoo)
+library(ggplot2)
+library(rmgarch)
+library(parallel)
+require(rugarch)			
+require(gridExtra)
+library(moments)
+source("secruityscraper.R")
+source("secruitycleaner.R")
+setwd(datdir)
+
+raw <- read.csv("SP500-output-clean.csv")
+dates <- raw$date
+raw <- raw[,-c(1)]
+#append S&P 500 for comparision
+sp <- Quandl("YAHOO/INDEX_GSPC", start_date=startdate, end_date=enddate)
+sp <- sp[-c(2,3,4,6,7)] #keep only dates and close date
+sp <- sp[order(sp$Date),] #reorder data
+rows <- match(as.character(sp[,1]),as.character(raw[,1])) #match SP levels to clean dataset
+raw <- raw[rows,]
+dates <- dates[rows]
+raw$SP500 <- sp[,2] #append S&P 500 to vector list
+
+#Convert data to log level and take difference
+data <- data.frame(apply(raw[,-1], MARGIN=2, log)) #convert to log prices
+data$Date <- as.character(dates)
+
+#Difference log prices to find returns 
+rtrn <- data.frame(apply(data[,-dim(data)[2]], MARGIN=2, diff)) #take difference of log prices
+rtrn$Date <- as.character(dates[-1])
+rownames(rtrn) <- sp$Date[-1]
+
+#Method 1 Compute Correlation Matrix
+L <- dim(rtrn)[2]-2 #all secruities minus SP500 and dates
+timevarcor <- matrix(ncol=L, nrow=dim(rtrn)[1]-2) #Create data.frame for time conditional variance
+colnames(timevarcor) <- head(colnames(rtrn), -2) #all secruites minus SP500 and dates
+rownames(timevarcor) <- head(rtrn$Date,-2)
+
+#Create parallel environment for each iteration
+cl <- makeCluster(min(detectCores(),5),type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
+
+for(n in 1:L){
+    #n<-1
+		###Create data.frame for models #subtract 1 because of differencing
+		moddata <- matrix(ncol=2, nrow=dim(rtrn)[1]-1)
+		moddata[,1] <- head(rtrn[,"SP500"],-1)
+		moddata[,2] <- head(rtrn[,n],-1)
+		rownames(moddata) <- head(rtrn$Date,-1)
+		moddata <- moddata[-nrow(moddata),] #remove last row
+		moddata <- data.frame(moddata)
+
+		#Build parameters for market GARCH
+		spec1 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(2,2)),
+								distribution.model= "norm")
+		#Build parameters for secruity GARCH
+		spec2 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1,1)),
+								distribution.model= "norm")
+		
+		#Fit GARCH models
+		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), cluster=cl)
+		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), cluster=cl), silent=TRUE)
+
+		#Build parameters for DCC model 
+		dccspec <- dccspec(VAR=TRUE, uspec = multispec(c(spec1, spec2)), dccOrder = c(1,1), distribution = "mvnorm")
+
+		#Fit DCC model
+		dcc <- try(dccfit(dccspec, data = moddata, fit.control=list(scale=TRUE), cluster=cl), silent=TRUE)
+
+		tryCatch({
+
+			plot(dcc, which=4)
+			corrmatrix <- rcor(dcc, type="R")
+			corrmatrix <- zoo(corrmatrix[1,2,], order.by=as.Date(rownames(moddata)))
+			timevarcor[,n] <- corrmatrix
+
+		}, error=function(e) {cat("ERROR :",conditionMessage(e), "\n")
+		})
+
+		message("Calculating Time Varying Correlation for Secruity: ", n, "/", L)
+	
+}
+
+stopCluster(cl)
+
+top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
+low10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=FALSE),10)))
+
+#Compare returns against SP&500 Returns
+L <- dim(top10names)[2]
+eval <- data.frame(Date=sp$Date[-1])
+eval$SP500 <- rtrn[,474]
+eval$benchmark <- NA
+for(n in 1:L){
+	date <- names(top10names[1,n])
+	topstocks <- as.character(top10names[,n])
+	lowstocks <- as.character(low10names[,n])
+
+	eval$benchmark[n] <- mean(as.numeric(rtrn[date,topstocks]))
+}
+eval$error <- eval$SP500 - eval$benchmark
+
+#Visual Representation
+plot1 <-	ggplot() +
+			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue') +
+				ggtitle("Benchmark Superimposed on SP500") + theme(plot.title = element_text(lineheight=.8, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+				ggtitle("SP500") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue') +
+				ggtitle("Top 10 Correlated Secruities") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+```
+
+Methodology
+==========================
+
+In order to appropiately mimic the daily returns of the S&P 500, one must isolate secruities whose returns are "most like" the S&P 500 at any given point in time. By selecting ten secruites who most mirror the index, one can form a comparable(in returns) profolio.
+
+Whily various metrics such as cointegration and PCA could be considered as a similarity criterion, I employ dynamic time varying conditional correlation (DCC) models in order to find and select the most benefical secruties. This is a non-trivial process; I outline five steps:
+
+
+1. Collect daily stock level prices on S&P 500 secruities
+2. Clean and pre-process data
+3. Estimate time varying conditional correlation via eGARCH and DCC models
+4. Isolate the top-ten most correlated secruites and form a daily profolio
+5. Compare profolio returns to S&P 500 returns
+
+First, a targeted universe of secruities is generated. Secondly, the raw price levels are cleaned, pre-processed, and transformed in order to faciliate smooth analysis. I next consider several GARCH models^[GARCH, APARCH, GJG-GARCH, EGARCH are considered] in order to accurately capture the variance dynamics of each time series; after compleletion, an appropiate VAR DCC model is fit to the secruity and market timeseries. Next, the top-ten most correlated secruties are selected and used as the basis for a daily profolio. Finally, the profolio returns are compared against daily S&P 500 returns. 
+
+Collect Daily Price Levels
+============
+I begin by compiling all stocks currrently listed on the S&P 500. These stocks constitute a 'universe' of secruities, and form the basis of candidate secruites. In order to expediate the data collection process, I write a function "SecruityScraper"^[See appendix for additional information] to scrape daily price level data for the past 10 years.^[See [Quandl](https://www.quandl.com/data/WIKI) datasets]
+
+```{r step1, eval=FALSE, include=TRUE, cache=TRUE}
+
+enddate <- Sys.Date()
+startdate <- enddate - 365*10 
+source("secruityscraper.R")
+SecruityScraper(name="SP500", 
+                startdate=startdate, 
+                enddate=enddate, type="WIKI", 
+                key="X", sleep=0)
+```
+
+Collect Daily Price Levels
+============
+Because the raw data contains weekends, holidays, and missing observations it is necessary to clean and preprocess the data in order to faciliate smooth analysis. I write another function, "SecruityCleaner"^[See appendix for additional information] to clean the data. ^[Missing observations are imputed with either the nearest column value or column mean, depedent on the situation, see appendix for code logic] Secruites that have too few observations are removed from the candidate pool; the universe of secruties totals 474.
+
+```{r step1.1, eval=FALSE, results="hide", include=TRUE}
+source("secruitycleaner.R")
+SecruityCleaner(name="SP500", days=144)
+```
+
+During this step, I append daily S&P 500 price levels in order to compare the returns of the formed profolio against the index. 
+
+```{r step1.2, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+
+sp <- Quandl("YAHOO/INDEX_GSPC", start_date=startdate, end_date=enddate)
+
+rows <- match(as.character(sp[,1]), as.character(raw[,1])) #match SP levels to clean dataset
+
+raw$SP500 <- sp[,2] #append S&P 500 to vector 
+```
+
+The dataset now contains the entire universe of cleaned secruties and S&P 500 price levels. I further manipulate the data by taking the natural log of the price levels; after differencing the data, I am able to take advantage of a natural property of logs. I now have a continously compounded time series.
+
+\[r=ln(p_{t}) - ln(p_{t-1})\]
+
+
+```{r step1.3, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+#Convert data to log level and take difference
+data <- data.frame(apply(raw[,-1], MARGIN=2, log)) 
+data$Date <- as.character(dates)
+
+#Difference log prices to find returns 
+rtrn <- data.frame(apply(data[,-dim(data)[2]], MARGIN=2, diff)) 
+rtrn$Date <- as.character(dates[-1])
+rownames(rtrn) <- sp$Date[-1]
+
+```
+
+
+Analysis: Univariate Variances
+============
+
+This analysis will become computationally expensive. I create a parallel environment in order to increase the speed of computation.
+
+```{r analysis1, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+
+library(parallel)
+cl <- makeCluster(min(detectCores(),5),
+      type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
+
+```
+
+In order to fit DCC models to each respective secruity and S&P 500 index, I first estimate two univariate GARCH models in order to capture the variance dynamics of each series. 
+
+I observe non-normality upon inspection of the raw logged returns. That is, a fat left-tail. Given this non-normality, it may be that I must relax normality assumption on my GARCH episolon errors and choose a more appropiate distribution.
+
+```{r analysis11, echo=FALSE, eval=TRUE, include=TRUE}
+hist(moddata[,1], col="lightblue", main="Histogram of Differenced Logged Returns", xlab="Returns")
+```
+```{r analysis111, echo=TRUE, eval=TRUE, include=TRUE}
+library(moments)
+kurtosis(moddata[,1])
+skewness(moddata[,1])
+```
+
+I consider asymettric EGARCH, GJG-GARCH, APARCH models and the GARCH model while varying lagged orders and error distributions: (normal, normal-skewed, t-distribution, t-skewed) before settling on a EGARCH(2,2) for the S&P 500 index and a EGARCH(1,1) for all individual secruities. 
+
+put in latex for EGARCH model
+
+It is unsurprising that an assymetric model works well here; times of high variance correlation etc... talk about what the model is doing.
+
+Due to computational and time limitations, I blanket an EGARCH(1,1) to all individual secruites; while most GARCH processes are of either order (1,1) or (2,2), I have drawn a blanket statement and assummed that all secruites will follow this process. This is highly uncertain.
+
+In fact, through dianoistic checking I determine that an GRG-GARCH(1,1) fits mosts series better than any other GARCH process; however when piping the assymetric process into a DCC model, inverse singular matrix errors force adoptation of a slightly less complicated model. 
+
+```{r analysis1.2, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+
+library(rmgarch)
+require(rugarch)
+
+#Build parameters for market GARCH
+		spec1 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(2,2)),
+								distribution.model= "norm")
+		
+#Build parameters for secruity GARCH
+		spec2 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1,1)),
+								distribution.model= "norm")
+
+#Fit GARCH models
+		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), 
+		                    cluster=cl)
+		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), 
+		                    cluster=cl), silent=TRUE)
+
+```
+
+Before continuing, I conduct several quick diagnostic checks. My S&P 500 EGARCH(2,2) process captures all serial correlation in the time series. While I cannot confirm that each individaul secruity follows a EGARCH(1,1) process, I accept this assumption given time and computational constrains and proceed with the analysis.
+
+```{r analysis201, echo=FALSE, eval=TRUE, include=TRUE}
+plot(garch1, which=1)
+```
+
+```{r analysis20df1, echo=FALSE, eval=TRUE, include=TRUE}
+plot(garch1, which=8)
+```
+
+```{r analysis2031, echo=FALSE, eval=TRUE, include=TRUE}
+plot(garch1, which=11)
+```
+
+Although heavy left skew remains in my residuals--indicative of a less-than-perfect fit ARCH model, these are the best results I am able to get. 
+
+While the residual errors are not perfectly normally distributed, relaxing the assumption and estimating student-t or skewed-normal distrubtion worsens the kurtosis and skewness. I proceed under the normal assumption. 
+
+```{r analysis20121, echo=TRUE, eval=TRUE, include=TRUE}
+kurtosis(garch1@fit$residuals)
+skewness(garch1@fit$residuals)
+```
+
+Inspecting the EGARCH(2,2) S&P 500 coefficients, I observe significant covariates. Notably the assymetric terms(gamma, and gamma2) are highly signifcant.
+
+Inspecting, the EGARCH(1,1) individaul secruity coefficients, I observe highly significant covariates with the expection of the long-run mean (mu). It would appear to indicate that there is no long-run mean-variance for this secruity--at least one estimated by statistically sound parameters. 
+
+```{r analysis-check24, echo=FALSE, include=TRUE}
+
+table <- garch1@fit$matcoef
+knitr::kable(table)
+#Bayesian Information Criteria -6.4006
+```
+
+```{r analysis-check34, echo=FALSE, include=TRUE}
+
+table2 <- garch2@fit$matcoef
+knitr::kable(table2)
+#Bayesian Information Criteria -6.4305
+
+```
+Analysis: Multivariate Conditional Correlations
+============
+
+Now that i have finished estimating univariate variances, I am ready to incorporate this information into a multivariate DCC model. Although I had considered asymmetric variance dynamics in the previous EGARCH estimations, I discard an aDCC model due to its insignificant coefficients and non-intuitive understanding. 
+
+"Include Equation description here""
+
+Diagnostic checking here indicates that a mulitvariate DCC(1,1) model is the most suitable for this process, while higher orders models appear to have comproable BIC/AIC scores, and better fit to the skewed, non-normal data-- the higher order coefficients are insignicant and I fear that I risk overfitting at this point. 
+
+After fitting the model, I construct the correlation matrix and terminate the parralel cluster.
+
+```{r analysis1.4, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+
+#Build parameters for DCC model 
+dccspec <- dccspec(VAR=TRUE, uspec = multispec(c(spec1, spec2)), dccOrder = c(1,1), 
+                   distribution = "mvnorm")
+
+#Fit DCC model
+dcc <- try(dccfit(dccspec, data = moddata, fit.control=list(scale=TRUE), cluster=cl), 
+           silent=TRUE)
+
+corrmatrix <- rcor(dcc, type="R")
+corrmatrix <- zoo(corrmatrix[1,2,], order.by=as.Date(rownames(moddata)))
+timevarcor[,n] <- corrmatrix
+
+stopCluster(cl) 
+```
+
+```{r analysis232011, echo=FALSE, eval=TRUE, include=TRUE, fit.center=TRUE}
+plot(dcc, which=4)
+```
+
+A mulivariate DCC(1,1) indicates that most coefficients are significant, although I believe I have spurious estimations for the X1/X2 Beta1 coefficient. Individaul secruity coefficients appear to be weaker (X2 variables) than the coefficients fit for the S&P 500.
+
+```{r analysis-check454, echo=FALSE, include=TRUE}
+
+table3 <- dcc@mfit$matcoef
+knitr::kable(table3)
+
+```
+
+Analysis: Evaluation
+============
+After computing the time varying correlations for all 474 secruites, I now select the ten-most correlated (to S&P 500) secruites for each day. And for each day I average each secruity's return to form my daily profolio. This is a rather naive approach; I am essentially equally weighting each secruity under the hope that it will accurately mirror the S&P 500 returns. A more pragmatic approach would be to optimze the weighting of the profolio given the intrinsic characteristics of the profolio. 
+
+I now have a vector of profolio returns for each day in my 10-year sample. I compare this to the S&P 500 benchmark and calculate the residual error. This is stored in the eval$error vector.
+
+To note, this estimation is biased. I have constructed a profolio where each day has perfect information on the current period and all proceeding periods; in short, I have not implemented a rolling window cross validation technique to determine out-of-sample R2. My model should be over-fit to this in-sample data. However, as a proof-of-concept this is adequate; further adoptations of this forecast would implement the aforementioned rolling window CV technique and use information at time t in order to forecast on returns in time t+1.
+
+```{r analysis1.5, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+
+top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) 
+                   names(head(sort(x, decreasing = decreasing=TRUE),10)))
+
+#Compare returns against SP&500 Returns
+L <- dim(top10names)[2]
+eval <- data.frame(Date=sp$Date[-1])
+eval$SP500 <- rtrn[,474]
+eval$benchmark <- NA
+
+for(n in 1:L){
+	date <- names(top10names[1,n])
+	topstocks <- as.character(top10names[,n])
+	lowstocks <- as.character(low10names[,n])
+
+	eval$benchmark[n] <- mean(as.numeric(rtrn[date,topstocks]))
+}
+eval$error <- eval$SP500 - eval$benchmark 
+
+```
+
+Analysis: Final Results
+============
+
+```{r analysis23223d011, echo=FALSE, eval=TRUE, include=TRUE}
+#Visual Representation
+plot1 <-	ggplot() + 
+			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue') +
+				ggtitle("Top-10 Profolio Superimposed on SP500") + theme(plot.title = element_text(lineheight=.8, face="bold")) +
+				labs(color = "Legend") + 
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+				ggtitle("SP500") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") + 
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue') +
+				ggtitle("Top-10 Correlated Secruities") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") + 
+				xlab('Date') +
+				ylab('Price Levels')
+
+grid.arrange(plot1,plot2, plot3, ncol=1)
+```
+
+Given a basket of ten secruites, the constructed profolio adequately mimicks the returns of the S&P 500. The bottommost chart displays the constructed profolio, the middle graph displays S&P 500 returns, and the topmost chart shows the returns of the top 10 correlated secruties superimposed on the returns of the S&P500
+
+While the S&P 500 is less variable, read less risky, this is expected. In fact, I have distilled an index of 500 secruites to 10; it should be no surprise that the constructed profolio has more variance.
+
+```{r analysis23223011, echo=FALSE, eval=TRUE, include=TRUE}
+errors <- eval$error[c(1:5, 100:110)]
+knitr::kable(errors)
+sum(((eval$error) ** 2), na.rm=TRUE)
+```
+
+During low-variance regimes, the profolio's errors are much lower than during high volatility regimes. The unpredictability during those time periods is especially prononounced and one can see signicant errors during the early to mid 2009.
+
+```{r analysis2311, echo=FALSE, eval=TRUE, include=TRUE}
+sum(((eval$error) ** 2), na.rm=TRUE)
+```
+And although not valuable when compared in isolation (one must vary the models are compare use this metric as a comparision), we observe loosely defined 'SSR' of 0.1836 ^[Given GRJ-GARCH and sGARCH models, this statistic indicates: 0.1654 and 0.2043, respectively]
+
+Conclusion
+===================
+Talk about naive weighting, introduce variable weighting, better model estimatoin, automatiion of GARCH selection (1,1) assumption, higher order DCC model? 
+
+Appendix
+===================
+
+```{r code1, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+SecruityScraper <- function(name, startdate, enddate, type, key, sleep){
+
+# Description
+# This script scraps Quandl.com for data given a date range and symbol list
+
+# Arguments
+
+#'name' is the name of a csv file containing stock symbols to download #do not include .csv
+#'startdate' is the start date of data
+#'enddate' is the end data of data
+#'type' is the Quandl database header; this should be input as a character  IE 'WIKI'
+#'key' is the Quandl key
+#'sleep' is the number of seconds to wait before querying Quandl server
+
+# Example
+# SecruityScraper("NASDAQ", "2001-09-11", "2015-01-01", "WIKI","40F..U&E")
+
+# Requirements
+
+# Requires the Quandl library
+# Requires loaded csv file to have a column header of "ticker" for all secruity symbols
+# Startdate and enddate must not be same date
+					
+#setup environment
+name <- name
+raw <- read.csv(paste(name,".csv", sep=''))
+tickers <- as.character(raw$ticker)
+
+enddate <- enddate
+startdate <- startdate
+dates <- seq.Date(as.Date(startdate), as.Date(enddate), by='day') #create daily dates
+
+#allocate memory for data
+L <- length(tickers)
+D <- length(dates) 
+dataset <- matrix(ncol=L, nrow=D)
+dimnames(dataset) <- list(rownames(dataset, 
+                                   do.NULL = FALSE, 
+                                   prefix = "row"), 
+                                   colnames(dataset, 
+                                   do.NULL = FALSE, 
+                                   prefix = "col"))
+colnames(dataset) <- tickers
+rownames(dataset) <- as.character(dates)
+
+#specify date range
+enddate <- dates[length(dates)]
+startdate <- dates[1]
+header <- paste(type, "/", sep="")
+
+#retrive stock data
+require(Quandl)
+Quandl.api_key(key)
+
+for(i in 1:L){
+
+tryCatch({
+sym <- paste(header, tickers[i], sep="")
+info <- Quandl(sym, start_date=startdate, end_date=enddate)
+tempdate <- info$Date
+
+info <- data.frame(info$Close)
+rownames(info) <- tempdate
+put <- merge(info, dataset[,i], by=0, all=TRUE)
+dataset[,i] <- put$info.Close
+message("Scraping data for stock: ", tickers[i], " | Number: ", i, "/", L)
+
+Sys.sleep(sleep) #API speed limit 
+}, error=function(e)	{
+cat("ERROR :",conditionMessage(e), "\n")
+#Last value throws error
+})
+
+}
+
+#export data 
+write.csv(dataset, file = paste(name,"-output.csv", sep=''))
+
+}
+
+
+# Utility script for Secruity Cleaner 
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
+```
+
+
+
+```{r code2, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+SecruityCleaner <- function(name, days){
+
+# Description
+# This utility script removes non-trading days from SecruityScraper and imputes missing values with 
+  #the nearest value 
+
+# Arguments
+#'name' is the name of a csv file containing stock symbols to download #do not include .csv
+#'days' is the number of expected non-trading days per average year, default is 144
+
+# Example
+# SecruityCleaner("NASDAQ", 144)
+
+# Requirements
+
+# Requires the zoo library
+
+# Other
+
+# Error "ERROR(expected) : undefined columns selected" is excpected as columns are removed and 
+  #length of for-loop does not dynamically change
+
+#setup environment
+raw <- read.csv(paste(name,"-output.csv", sep=''))
+colnames(raw)[colnames(raw)=="X"] <- "date"
+L <- length(raw)
+
+# take out the non trading days aka weekends and holidays
+narows <- as.numeric(rownames(raw[rowSums(is.na(raw))>=dim(raw)[2]-10,])) 
+raw <- raw[-narows,]
+U <- dim(raw)[1]/365*(days-3) #number of years worth of data * number of non-trading days = 
+#max expected NAs #where 3 is a buffer
+L <- length(raw)
+
+#Remove secruites with missing observations
+for(n in 2:(L-1)){
+
+  tryCatch({
+		if (sum(is.na(raw[,n])) < U) {
+						message("Pass: ", n)
+		} else {
+					  message("Remove (not enough observations): ", n)
+						raw <- raw[,-c(n)]
+		}
+	}, error=function(e)	{#as columns are strunk, n becomes larger than initial column number set and produces errors at the end
+	cat("ERROR(expected) :",conditionMessage(e), "\n")
+	})
+
+}
+
+require(zoo)
+L <- length(raw)
+end <- dim(raw)[1]
+
+#Impute missing price levels with nearest price level
+for(n in 2:L){
+
+raw[1,n] <- ifelse(is.na(raw[1,n])==TRUE, na.locf(raw[,n])[1], raw[1,n]) #place value in first 
+raw[end,n] <- ifelse(is.na(raw[end,n])==TRUE, na.locf(raw[,n])[end], raw[end,n]) #place value in last
+raw[,n] <- na.locf(raw[,n] ,fromlast=TRUE) # scrub NA from backwards
+message("Imputing missing values with nearest value: ", n)
+
+}
+
+#Remove outliers and replace them with mean
+L <- length(raw)
+for(n in 2:L){
+			removed <- remove_outliers(raw[,n])
+			removed[is.na(removed)] = mean(removed, na.rm=TRUE)
+			raw[,n] <- removed
+			message("Removing outliers and imputing with mean: ", n)
+			}
+
+write.csv(raw, file = paste(name,"-output-clean.csv", sep=''))
+
+}
+```
+
+```{r code23, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
+rm(list=ls(all=TRUE))
+options("width"=200)
+options(scipen=999)
+options(digits=4)
+wkdir <- "/home/johnconnor/projecthedge/"
+lbdir <- "/home/johnconnor/projecthedge/lib/"
+datdir <- "/home/johnconnor/projecthedge/data/"
+
+##Set Parameters
+enddate <- Sys.Date()
+startdate <- enddate - 365*10 #appox 10 years of data, not counting trading days
+
+#Load required libraries & utility scripts
+setwd(lbdir)
+library(Quandl)
+library(zoo)
+library(ggplot2)
+library(rmgarch)
+library(parallel)
+require(rugarch)			
+require(gridExtra)
+library(moments)
+source("secruityscraper.R")
+source("secruitycleaner.R")
+setwd(datdir)
+
+raw <- read.csv("SP500-output-clean.csv")
+dates <- raw$date
+raw <- raw[,-c(1)]
+#append S&P 500 for comparision
+sp <- Quandl("YAHOO/INDEX_GSPC", start_date=startdate, end_date=enddate)
+sp <- sp[-c(2,3,4,6,7)] #keep only dates and close date
+sp <- sp[order(sp$Date),] #reorder data
+rows <- match(as.character(sp[,1]),as.character(raw[,1])) #match SP levels to clean dataset
+raw <- raw[rows,]
+dates <- dates[rows]
+raw$SP500 <- sp[,2] #append S&P 500 to vector list
+
+#Convert data to log level and take difference
+data <- data.frame(apply(raw[,-1], MARGIN=2, log)) #convert to log prices
+data$Date <- as.character(dates)
+
+#Difference log prices to find returns 
+rtrn <- data.frame(apply(data[,-dim(data)[2]], MARGIN=2, diff)) #take difference of log prices
+rtrn$Date <- as.character(dates[-1])
+rownames(rtrn) <- sp$Date[-1]
+
+#Method 1 Compute Correlation Matrix
+L <- dim(rtrn)[2]-2 #all secruities minus SP500 and dates
+timevarcor <- matrix(ncol=L, nrow=dim(rtrn)[1]-2) #Create data.frame for time conditional variance
+colnames(timevarcor) <- head(colnames(rtrn), -2) #all secruites minus SP500 and dates
+rownames(timevarcor) <- head(rtrn$Date,-2)
+
+#Create parallel environment for each iteration
+cl <- makeCluster(min(detectCores(),5),type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
+
+for(n in 1:L){
+    #n<-1
+		###Create data.frame for models #subtract 1 because of differencing
+		moddata <- matrix(ncol=2, nrow=dim(rtrn)[1]-1)
+		moddata[,1] <- head(rtrn[,"SP500"],-1)
+		moddata[,2] <- head(rtrn[,n],-1)
+		rownames(moddata) <- head(rtrn$Date,-1)
+		moddata <- moddata[-nrow(moddata),] #remove last row
+		moddata <- data.frame(moddata)
+
+		#Build parameters for market GARCH
+		spec1 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(2,2)),
+								distribution.model= "norm")
+		#Build parameters for secruity GARCH
+		spec2 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1,1)),
+								distribution.model= "norm")
+		
+		#Fit GARCH models
+		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), cluster=cl)
+		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), cluster=cl), silent=TRUE)
+
+		#Build parameters for DCC model 
+		dccspec <- dccspec(VAR=TRUE, uspec = multispec(c(spec1, spec2)), dccOrder = c(1,1), distribution = "mvnorm")
+
+		#Fit DCC model
+		dcc <- try(dccfit(dccspec, data = moddata, fit.control=list(scale=TRUE), cluster=cl), silent=TRUE)
+
+		tryCatch({
+
+			plot(dcc, which=4)
+			corrmatrix <- rcor(dcc, type="R")
+			corrmatrix <- zoo(corrmatrix[1,2,], order.by=as.Date(rownames(moddata)))
+			timevarcor[,n] <- corrmatrix
+
+		}, error=function(e) {cat("ERROR :",conditionMessage(e), "\n")
+		})
+
+		message("Calculating Time Varying Correlation for Secruity: ", n, "/", L)
+	
+}
+
+stopCluster(cl)
+
+top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
+low10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=FALSE),10)))
+
+#Compare returns against SP&500 Returns
+L <- dim(top10names)[2]
+eval <- data.frame(Date=sp$Date[-1])
+eval$SP500 <- rtrn[,474]
+eval$benchmark <- NA
+for(n in 1:L){
+	date <- names(top10names[1,n])
+	topstocks <- as.character(top10names[,n])
+	lowstocks <- as.character(low10names[,n])
+
+	eval$benchmark[n] <- mean(as.numeric(rtrn[date,topstocks]))
+}
+eval$error <- eval$SP500 - eval$benchmark
+
+#Visual Representation
+plot1 <-	ggplot() +
+			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue') +
+				ggtitle("Benchmark Superimposed on SP500") + theme(plot.title = element_text(lineheight=.8, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+				ggtitle("SP500") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue') +
+				ggtitle("Top 10 Correlated Secruities") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+				labs(color = "Legend") +
+				xlab('Date') +
+				ylab('Price Levels')
+
+```

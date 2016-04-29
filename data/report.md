@@ -1,0 +1,360 @@
+<!-- rmarkdown v1 -->
+
+---
+title: Mimicing S&P 500 Returns via eGARCH and DCC models
+author:
+  - name: Nathan Matare
+
+
+address:
+  - code: 
+    address: The University of Chicago Booth School of Business
+  - code: Another University
+    address: nmatare@chicagobooth.edu
+    
+abstract: |
+  Create a portfolio that best mimics the monthly returns of the S&P 500 Index over the past 10 years and does not hold more than 10 securities at any one time. Securities may consist of individual company stocks and not funds or any other type of investment vehicle.
+
+output: rticles::elsevier_article
+---
+
+
+
+
+
+
+
+
+
+
+Methodology
+==========================
+
+I will mimic the daily returns of the S&P 500 by isolating my universe of potential secruities to stocks currently listed on the S&P 500 and by holding equal weights in the ten-most correlated secruites. This is a non-trivial task. In order to isolate and identify such secruites, I outline five steps:
+
+1. Collect daily stock level prices on S&P 500 secruities
+2. Clean and pre-process data
+3. Estimate time varying conditional correlation via eGARCH and DCC models
+4. Isolate the top-ten most correlated secruites and form a daily profolio
+5. Compare profolio returns to S&P 500 returns
+
+Collect Daily Price Levels
+============
+I begin by compiling a list of all stocks currrently listed on the S&P 500. These stocks will constitute my 'universe' of secruities. In order to expediate the data collection process, I write a function "SecruityScraper"^[See appendix for additional information] to scrape daily price level data for the past 10 years.^[See [Quandl](https://www.quandl.com/data/WIKI) datasets]
+
+
+```r
+enddate <- Sys.Date()
+startdate <- enddate - 365*10 
+source("secruityscraper.R")
+SecruityScraper(name="SP500", 
+                startdate=startdate, 
+                enddate=enddate, type="WIKI", 
+                key="X", sleep=0)
+```
+
+Collect Daily Price Levels
+============
+Because the raw data contains weekends, holidays, and missing observations it is necessary to clean and preprocess the data in order to faciliate smooth analysis. I write another function, "SecruityCleaner"^[See appendix for additional information] to clean the raw datasets. ^[Missing observations are imputed with either the nearest column value or column mean, depedent on the situation] 
+
+
+```r
+source("secruitycleaner.R")
+SecruityCleaner(name="SP500", days=144)
+```
+
+During this step, I also append daily S&P 500 price levels so that I may compare final results. 
+
+
+```r
+sp <- Quandl("YAHOO/INDEX_GSPC", 
+             start_date=startdate, 
+             end_date=enddate)
+
+#match SP levels to clean dataset
+rows <- match(as.character(sp[,1]),
+              as.character(raw[,1])) 
+
+#append S&P 500 to vector 
+raw$SP500 <- sp[,2] 
+```
+
+Now that the data has my universe of clean secruities and S&P 500 price levels, I further manipulate that data by taking the natural log of all price series. This gives the added benfit of being able to take continously compounded returns. I also create a secondary data frame that holds the returns of each secruity. 
+
+
+```r
+#Convert data to log level and take difference
+data <- data.frame(apply(raw[,-1], MARGIN=2, log)) 
+data$Date <- as.character(dates)
+
+#Difference log prices to find returns 
+rtrn <- data.frame(apply(data[,-dim(data)[2]], MARGIN=2, diff)) 
+rtrn$Date <- as.character(dates[-1])
+rownames(rtrn) <- sp$Date[-1]
+```
+
+Analysis: Conditional Correlations
+============
+Discussion of the analysis you are going to run
+
+I first create a parallel environment to speed up computation
+
+
+```r
+library(parallel)
+cl <- makeCluster(min(detectCores(),5),
+      type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
+setwd(datdir)
+```
+
+
+
+
+Next I load the specifications for my GARCH varaince
+
+Talk about diagnosistics
+import historgram of residuals 
+talk about skew and kurtosis
+
+> hist(moddata[,1])gj
+> kurtosis(moddata[,1])
+
+
+
+
+```r
+library(rmgarch)
+require(rugarch)
+
+#Build parameters for market GARCH
+spec1 <- ugarchspec(variance.model = 
+                    list(model = "gjrGARCH", 
+                    garchOrder = c(2,2)), distribution.model= "std")
+
+#Build parameters for secruity GARCH
+spec2 <- ugarchspec(variance.model = 
+                    list(model = "gjrGARCH", 
+                    garchOrder = c(1,1)), distribution.model= "std")
+```
+
+If the document class *elsarticle* is not available on your computer,
+you can download and install the system package *texlive-publishers*
+(Linux) or install the LaTeX package *elsarticle* using the package
+manager of your TeX installation, which is typically TeX Live or MikTeX.
+
+#### Usage
+
+Once the package is properly installed, you can use the document class
+*elsarticle* to create a manuscript. Please make sure that your
+manuscript follows the guidelines in the Guide for Authors of the
+relevant journal. It is not necessary to typeset your manuscript in
+exactly the same way as an article, unless you are submitting to a
+camera-ready copy (CRC) journal.
+
+#### Functionality
+
+The Elsevier article class is based on the standard article class and
+supports almost all of the functionality of that class. In addition, it
+features commands and options to format the
+
+-   document style
+
+-   baselineskip
+
+-   front matter
+
+-   keywords and MSC codes
+
+-   theorems, definitions and proofs
+
+-   lables of enumerations
+
+-   citation style and labeling.
+
+Front matter
+============
+
+The author names and affiliations could be formatted in two ways:
+
+(1) Group the authors per affiliation.
+
+(2) Use footnotes to indicate the affiliations.
+
+See the front matter of this document for examples. You are recommended
+to conform your choice to the journal you are submitting to.
+
+Appendix
+===================
+
+
+```r
+SecruityScraper <- function(name, startdate, enddate, type, key, sleep){
+
+# Description
+# This script scraps Quandl.com for data given a date range and symbol list
+
+# Arguments
+
+#'name' is the name of a csv file containing stock symbols to download #do not include .csv
+#'startdate' is the start date of data
+#'enddate' is the end data of data
+#'type' is the Quandl database header; this should be input as a character  IE 'WIKI'
+#'key' is the Quandl key
+#'sleep' is the number of seconds to wait before querying Quandl server
+
+# Example
+# SecruityScraper("NASDAQ", "2001-09-11", "2015-01-01", "WIKI","40F..U&E")
+
+# Requirements
+
+# Requires the Quandl library
+# Requires loaded csv file to have a column header of "ticker" for all secruity symbols
+# Startdate and enddate must not be same date
+					
+#setup environment
+name <- name
+raw <- read.csv(paste(name,".csv", sep=''))
+tickers <- as.character(raw$ticker)
+
+enddate <- enddate
+startdate <- startdate
+dates <- seq.Date(as.Date(startdate), as.Date(enddate), by='day') #create daily dates
+
+#allocate memory for data
+L <- length(tickers)
+D <- length(dates) 
+dataset <- matrix(ncol=L, nrow=D)
+dimnames(dataset) <- list(rownames(dataset, 
+                                   do.NULL = FALSE, 
+                                   prefix = "row"), 
+                                   colnames(dataset, 
+                                   do.NULL = FALSE, 
+                                   prefix = "col"))
+colnames(dataset) <- tickers
+rownames(dataset) <- as.character(dates)
+
+#specify date range
+enddate <- dates[length(dates)]
+startdate <- dates[1]
+header <- paste(type, "/", sep="")
+
+#retrive stock data
+require(Quandl)
+Quandl.api_key(key)
+
+for(i in 1:L){
+
+tryCatch({
+sym <- paste(header, tickers[i], sep="")
+info <- Quandl(sym, start_date=startdate, end_date=enddate)
+tempdate <- info$Date
+
+info <- data.frame(info$Close)
+rownames(info) <- tempdate
+put <- merge(info, dataset[,i], by=0, all=TRUE)
+dataset[,i] <- put$info.Close
+message("Scraping data for stock: ", tickers[i], " | Number: ", i, "/", L)
+
+Sys.sleep(sleep) #API speed limit 
+}, error=function(e)	{
+cat("ERROR :",conditionMessage(e), "\n")
+#Last value throws error
+})
+
+}
+
+#export data 
+write.csv(dataset, file = paste(name,"-output.csv", sep=''))
+
+}
+
+
+# Utility script for Secruity Cleaner 
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
+```
+
+
+
+
+```r
+SecruityCleaner <- function(name, days){
+
+# Description
+# This utility script removes non-trading days from SecruityScraper and imputes missing values with the nearest value 
+
+# Arguments
+#'name' is the name of a csv file containing stock symbols to download #do not include .csv
+#'days' is the number of expected non-trading days per average year, default is 144
+
+# Example
+# SecruityCleaner("NASDAQ", 144)
+
+# Requirements
+
+# Requires the zoo library
+
+# Other
+
+# Error "ERROR(expected) : undefined columns selected" is excpected as columns are removed and length of for-loop does not dynamically change
+
+#setup environment
+raw <- read.csv(paste(name,"-output.csv", sep=''))
+colnames(raw)[colnames(raw)=="X"] <- "date"
+L <- length(raw)
+
+# take out the non trading days aka weekends and holidays
+narows <- as.numeric(rownames(raw[rowSums(is.na(raw))>=dim(raw)[2]-10,])) 
+raw <- raw[-narows,]
+U <- dim(raw)[1]/365*(days-3) #number of years worth of data * number of non-trading days = max expected NAs #where 3 is a buffer
+L <- length(raw)
+
+#Remove secruites with missing observations
+for(n in 2:(L-1)){
+
+  tryCatch({
+		if (sum(is.na(raw[,n])) < U) {
+						message("Pass: ", n)
+		} else {
+					  message("Remove (not enough observations): ", n)
+						raw <- raw[,-c(n)]
+		}
+	}, error=function(e)	{#as columns are strunk, n becomes larger than initial column number set and produces errors at the end
+	cat("ERROR(expected) :",conditionMessage(e), "\n")
+	})
+
+}
+
+require(zoo)
+L <- length(raw)
+end <- dim(raw)[1]
+
+#Impute missing price levels with nearest price level
+for(n in 2:L){
+
+raw[1,n] <- ifelse(is.na(raw[1,n])==TRUE, na.locf(raw[,n])[1], raw[1,n]) #place value in first 
+raw[end,n] <- ifelse(is.na(raw[end,n])==TRUE, na.locf(raw[,n])[end], raw[end,n]) #place value in last
+raw[,n] <- na.locf(raw[,n] ,fromlast=TRUE) # scrub NA from backwards
+message("Imputing missing values with nearest value: ", n)
+
+}
+
+#Remove outliers and replace them with mean
+L <- length(raw)
+for(n in 2:L){
+			removed <- remove_outliers(raw[,n])
+			removed[is.na(removed)] = mean(removed, na.rm=TRUE)
+			raw[,n] <- removed
+			message("Removing outliers and imputing with mean: ", n)
+			}
+
+write.csv(raw, file = paste(name,"-output-clean.csv", sep=''))
+
+}
+```
