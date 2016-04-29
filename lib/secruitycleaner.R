@@ -8,7 +8,7 @@ remove_outliers <- function(x, na.rm = TRUE, ...) {
   y[x > (qnt[2] + H)] <- NA
   y
 }
-#make this variable for standard deviations
+
 
 SecruityCleaner <- function(name, days){
 
