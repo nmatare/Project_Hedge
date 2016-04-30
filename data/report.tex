@@ -106,7 +106,7 @@
 \hypersetup{breaklinks=true,
             bookmarks=true,
             pdfauthor={},
-            pdftitle={Mimicing S\&P 500 Returns via eGARCH and DCC models},
+            pdftitle={Portfolio Creation \textbar{} Mimicking 10-Year S\&P 500 Returns via DCC Multivariate EGARCH Processes},
             colorlinks=true,
             urlcolor=blue,
             linkcolor=magenta,
@@ -126,7 +126,8 @@
 \begin{document}
 \begin{frontmatter}
 
-  \title{Mimicing S\&P 500 Returns via eGARCH and DCC models}
+  \title{Portfolio Creation \textbar{} Mimicking 10-Year S\&P 500 Returns via DCC
+Multivariate EGARCH Processes}
     \author[]{Nathan Matare}
   
   
@@ -134,61 +135,63 @@
     \address[Another University]{nmatare@chicagobooth.edu}
   
   \begin{abstract}
-  Create a portfolio that best mimics the monthly returns of the S\&P 500
+  Create a portfolio that best mimics the daily returns of the S\&P 500
   Index over the past 10 years and does not hold more than 10 securities
   at any one time. Securities may consist of individual company stocks and
-  not funds or any other type of investment vehicle.
+  not funds nor any other type of investment vehicle.
   \end{abstract}
   
  \end{frontmatter}
 
 \section{Methodology}\label{methodology}
 
-In order to appropiately mimic the daily returns of the S\&P 500, one
-must isolate secruities whose returns are ``most like'' the S\&P 500 at
-any given point in time. By selecting ten secruites who most mirror the
-index, one can form a comparable(in returns) profolio.
+I will mimic the daily returns of the S\&P 500 by isolating and holding
+ten securities whose returns are most similar to the S\&P 500 during
+each period. This is a non-trivial process, thus I employ Dynamic
+Conditional Correlation (DCC) Multivariate Exponential Generalized
+Autoregressive Conditional Heteroscedasticity (EGARCH) models to
+identify and isolate similar return-yielding securities for each period
+throughout the 10-year sample.
 
-Whily various metrics such as cointegration and PCA could be considered
-as a similarity criterion, I employ dynamic time varying conditional
-correlation (DCC) models in order to find and select the most benefical
-secruties. This is a non-trivial process; I outline five steps:
+The process outline is such:
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \tightlist
 \item
-  Collect daily stock level prices on S\&P 500 secruities
+  Collect daily price levels on S\&P 500 secruities;
 \item
-  Clean and pre-process data
+  Clean and pre-process data;
 \item
   Estimate time varying conditional correlation via eGARCH and DCC
-  models
+  models;
 \item
-  Isolate the top-ten most correlated secruites and form a daily
-  profolio
+  Isolate the top-ten most correlated securities and form a daily
+  portfolio; and
 \item
-  Compare profolio returns to S\&P 500 returns
+  Compare portfolio returns to S\&P 500 returns.
 \end{enumerate}
 
-First, a targeted universe of secruities is generated. Secondly, the raw
-price levels are cleaned, pre-processed, and transformed in order to
-faciliate smooth analysis. I next consider several GARCH
-models\footnote{GARCH, APARCH, GJG-GARCH, EGARCH are considered} in
-order to accurately capture the variance dynamics of each time series;
-after compleletion, an appropiate VAR DCC model is fit to the secruity
-and market timeseries. Next, the top-ten most correlated secruties are
-selected and used as the basis for a daily profolio. Finally, the
-profolio returns are compared against daily S\&P 500 returns.
+Project Summary:
+
+First, a targeted universe of securities is generated. Next, raw price
+levels are cleaned, logged, and first-order integrated. Several GARCH
+models are considered \footnote{SGARCH, APARCH, GJR-GARCH, EGARCH} in
+order to best capture the variance dynamics in each time series. After
+completion, an appropriate VAR DCC model is fit to the security and
+market time-series data. Next, the top-ten most correlated securities
+are selected and inputed into the final portfolio. Finally, the
+portfolio returns are compared against the daily S\&P 500 returns.
 
 \section{Collect Daily Price Levels}\label{collect-daily-price-levels}
 
-I begin by compiling all stocks currrently listed on the S\&P 500. These
-stocks constitute a `universe' of secruities, and form the basis of
-candidate secruites. In order to expediate the data collection process,
-I write a function ``SecruityScraper''\footnote{See appendix for
-  additional information} to scrape daily price level data for the past
-10 years.\footnote{See \href{https://www.quandl.com/data/WIKI}{Quandl}
+I begin by compiling a list of all stocks currently listed on the S\&P
+500. These stocks constitute the `universe of securities' and form the
+basis of candidate stocks. In order to expedite the collection of
+granular price series data, I program the function ``SecurityScraper''
+\footnote{See appendix for additional information} to integrate with
+Quandl.com's API and scrape daily price level data for the past 10
+years.\footnote{See \href{https://www.quandl.com/data/WIKI}{Quandl}
   datasets}
 
 \begin{Shaded}
@@ -205,15 +208,15 @@ I write a function ``SecruityScraper''\footnote{See appendix for
 
 \section{Collect Daily Price Levels}\label{collect-daily-price-levels-1}
 
-Because the raw data contains weekends, holidays, and missing
-observations it is necessary to clean and preprocess the data in order
-to faciliate smooth analysis. I write another function,
-``SecruityCleaner''\footnote{See appendix for additional information} to
-clean the data. \footnote{Missing observations are imputed with either
-  the nearest column value or column mean, depedent on the situation,
-  see appendix for code logic} Secruites that have too few observations
-are removed from the candidate pool; the universe of secruties totals
-474.
+The collected 10MB raw dataset contains weekends, holidays, and missing
+observations. It is necessary to clean and pre-process the data in order
+to facilitate smooth analysis. I deploy another function,
+``SecruityCleaner'' \footnote{See appendix for additional information}
+to clean the data. \footnote{Missing observations are imputed with
+  either the nearest column value or column mean, dependent on the
+  situation, see appendix for code logic} Securities with too few
+observations are removed from the candidate pool; the universe of
+potential securities totals 474 stocks with 2514 daily observations.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -222,25 +225,20 @@ are removed from the candidate pool; the universe of secruties totals
 \end{Highlighting}
 \end{Shaded}
 
-During this step, I append daily S\&P 500 price levels in order to
-compare the returns of the formed profolio against the index.
+Additionally, I append daily S\&P 500 price levels to the dataset:
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{sp <-}\StringTok{ }\KeywordTok{Quandl}\NormalTok{(}\StringTok{"YAHOO/INDEX_GSPC"}\NormalTok{, }\DataTypeTok{start_date=}\NormalTok{startdate, }\DataTypeTok{end_date=}\NormalTok{enddate)}
-
 \NormalTok{rows <-}\StringTok{ }\KeywordTok{match}\NormalTok{(}\KeywordTok{as.character}\NormalTok{(sp[,}\DecValTok{1}\NormalTok{]), }\KeywordTok{as.character}\NormalTok{(raw[,}\DecValTok{1}\NormalTok{])) }\CommentTok{#match SP levels to clean dataset}
-
 \NormalTok{raw$SP500 <-}\StringTok{ }\NormalTok{sp[,}\DecValTok{2}\NormalTok{] }\CommentTok{#append S&P 500 to vector }
 \end{Highlighting}
 \end{Shaded}
 
-The dataset now contains the entire universe of cleaned secruties and
-S\&P 500 price levels. I further manipulate the data by taking the
-natural log of the price levels; after differencing the data, I am able
-to take advantage of a natural property of logs. I now have a
-continously compounded time series.
-
+Now that the dataset contains the entire universe of cleaned price
+levels, I further transform the data via a natural log and first-order
+integration. Such transformation grants an advantageous property of
+approximating continuously compounding returns:
 \[r=ln(p_{t}) - ln(p_{t-1})\]
 
 \begin{Shaded}
@@ -256,34 +254,31 @@ continously compounded time series.
 \end{Highlighting}
 \end{Shaded}
 
-\section{Analysis: Conditional
-Correlations}\label{analysis-conditional-correlations}
+\section{Analysis: Univariate Variance
+Modeling}\label{analysis-univariate-variance-modeling}
 
-This analysis will become computationally expensive. I create a parallel
-environment in order to increase the speed of computation.
+The following analysis will become computationally expensive, I
+instantiate a parallel environment to increase the speed of computation.
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{library}\NormalTok{(parallel)}
-\NormalTok{cl <-}\StringTok{ }\KeywordTok{makeCluster}\NormalTok{(}\KeywordTok{min}\NormalTok{(}\KeywordTok{detectCores}\NormalTok{(),}\DecValTok{5}\NormalTok{),}
-      \DataTypeTok{type=}\KeywordTok{ifelse}\NormalTok{(.Platform$OS.type==}\StringTok{"unix"}\NormalTok{,}\StringTok{"FORK"}\NormalTok{,}\StringTok{"PSOCK"}\NormalTok{))}
+\NormalTok{cl <-}\StringTok{ }\KeywordTok{makeCluster}\NormalTok{(}\KeywordTok{min}\NormalTok{(}\KeywordTok{detectCores}\NormalTok{(),}\DecValTok{5}\NormalTok{), }\DataTypeTok{type=}\KeywordTok{ifelse}\NormalTok{(.Platform$OS.type==}\StringTok{"unix"}\NormalTok{,}\StringTok{"FORK"}\NormalTok{,}\StringTok{"PSOCK"}\NormalTok{))}
 \end{Highlighting}
 \end{Shaded}
 
-In order to fit DCC models to each respective secruity and S\&P 500
-index, I first estimate two univariate GARCH models in order to capture
-the variance dynamics of each series.
-
-I observe non-normality upon inspection of the raw logged returns. That
-is, a fat left-tail. Given this non-normality, it may be that I must
-relax normality assumption on my GARCH episolon errors and choose a more
-appropiate distribution.
+Before fitting GARCH models, I inspect several return series. For the
+S\&P 500 series, I observe non-normality, heavy kurtosis, and slight
+negative skew. Given that standard GARCH models assume
+\textasciitilde{}N(0,1) errors, I caution against the standard
+model---it may be necessary to adjust the distribution parameters to
+account for the skewed non-normality. Similar analysis and conclusions
+follow for individual stock variance distributions.
 
 \includegraphics{report_files/figure-latex/analysis11-1.pdf}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{library}\NormalTok{(moments)}
 \KeywordTok{kurtosis}\NormalTok{(moddata[,}\DecValTok{1}\NormalTok{])}
 \end{Highlighting}
 \end{Shaded}
@@ -302,27 +297,37 @@ appropiate distribution.
 ## [1] -0.3189841
 \end{verbatim}
 
-I consider asymettric EGARCH, GJG-GARCH, APARCH models and the GARCH
-model while varying lagged orders and error distributions: (normal,
-normal-skewed, t-distribution, t-skewed) before settling on a
-EGARCH(2,2) for the S\&P 500 index and a EGARCH(1,1) for all individual
-secruities.
+Thus, to account for non-normality and left skew, I vary model
+parameters in an attempt to capture the underlying dynamics. I begin by
+adjusting distribution parameters: normal, normal-skewed,
+t-distribution, t-skewed; before settling on a normal distribution. It
+appears that while the data may not be perfectly normal---the normal
+distribution, in-fact, captures the underlying process more sufficiently
+than any other available distribution.
 
-put in latex for EGARCH model
+Further, standard GARCH models assume symmetry between negative and
+positive returns. That is, previous period positive returns affect
+current period variance at the same magnitude as previous period
+negative returns. However, empirical research suggests otherwise;
+indeed, previous period negative returns affect current period variance
+at a greater magnitude than previous period positive returns. Thus, I
+introduce several asymmetric models, namely: EGARCH, GJR-GARCH,
+APARCH\footnote{http://public.econ.duke.edu/\textasciitilde{}boller/Papers/glossary\_arch.pdf},
+before determining through model diagnostics that an exponential GARCH
+is the best candidate.\footnote{While an GJR-GARCH process fit the
+  series better---matrix singularities when the model is piped into the
+  VAR DCC model force me to select an EGARCH process}
 
-It is unsurprising that an assymetric model works well here; times of
-high variance correlation etc\ldots{} talk about what the model is
-doing.
+\[\log\sigma_{t}^2=\omega+\sum_{k=1}^{q}\beta_{k}g(Z_{t-k})+\sum_{k=1}^{p}\alpha_{k}\log\sigma_{t-k}^{2}\]
 
-Due to computational and time limitations, I blanket an EGARCH(1,1) to
-all individual secruites; while most GARCH processes are of either order
-(1,1) or (2,2), I have drawn a blanket statement and assummed that all
-secruites will follow this process. This is highly uncertain.
-
-In fact, through dianoistic checking I determine that an GRG-GARCH(1,1)
-fits mosts series better than any other GARCH process; however when
-piping the assymetric process into a DCC model, inverse singular matrix
-errors force adoptation of a slightly less complicated model.
+Although I am able to manually determine that an EGARCH(2,2) process
+passes all diagnostic tests and fits the S\&P 500 series sufficiently,
+it is time prohibitive to replicate this manual process for all
+individual secruities. I could automate this process and select the most
+advantageous EGARCH(p,q) model based upon residual, autocorrelation
+function (ACF), partial autocorrelation function (PACF), and information
+criteria; but given time constraints, I settle on an EGARCH(1,1) process
+for all individual securities.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -332,11 +337,9 @@ errors force adoptation of a slightly less complicated model.
 \CommentTok{#Build parameters for market GARCH}
         \NormalTok{spec1 <-}\StringTok{ }\KeywordTok{ugarchspec}\NormalTok{(}\DataTypeTok{variance.model =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{model =} \StringTok{"eGARCH"}\NormalTok{, }\DataTypeTok{garchOrder =} \KeywordTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{,}\DecValTok{2}\NormalTok{)),}
                                 \DataTypeTok{distribution.model=} \StringTok{"norm"}\NormalTok{)}
-        
 \CommentTok{#Build parameters for secruity GARCH}
         \NormalTok{spec2 <-}\StringTok{ }\KeywordTok{ugarchspec}\NormalTok{(}\DataTypeTok{variance.model =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{model =} \StringTok{"eGARCH"}\NormalTok{, }\DataTypeTok{garchOrder =} \KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{)),}
                                 \DataTypeTok{distribution.model=} \StringTok{"norm"}\NormalTok{)}
-
 \CommentTok{#Fit GARCH models}
         \NormalTok{garch1 <-}\StringTok{ }\KeywordTok{ugarchfit}\NormalTok{(}\DataTypeTok{spec=}\NormalTok{spec1, }\DataTypeTok{data=}\NormalTok{moddata[,}\DecValTok{1}\NormalTok{], }\DataTypeTok{solver.control =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{trace=}\DecValTok{0}\NormalTok{), }
                             \DataTypeTok{cluster=}\NormalTok{cl)}
@@ -345,11 +348,9 @@ errors force adoptation of a slightly less complicated model.
 \end{Highlighting}
 \end{Shaded}
 
-Before continuing, I conduct several quick diagnostic checks. My S\&P
-500 EGARCH(2,2) process captures all serial correlation in the time
-series. While I cannot confirm that each individaul secruity follows a
-EGARCH(1,1) process, I accept this assumption given time and
-computational constrains and proceed with the analysis.
+Graphic displays of diagnostic checks and assumptions follow:\footnote{The
+  dates in the below plots are incorrect; the rmgarch package has an
+  error that defaults to this time period}
 
 \includegraphics{report_files/figure-latex/analysis201-1.pdf}
 
@@ -357,14 +358,8 @@ computational constrains and proceed with the analysis.
 
 \includegraphics{report_files/figure-latex/analysis2031-1.pdf}
 
-Although heavy left skew remains in my residuals--indicative of a
-less-than-perfect fit ARCH model, these are the best results I am able
-to get.
-
-While the residual errors are not perfectly normally distributed,
-relaxing the assumption and estimating student-t or skewed-normal
-distrubtion worsens the kurtosis and skewness. I proceed under the
-normal assumption.
+As discussed previously, residual diagnostics reveal that the errors are
+not \textasciitilde{}N(0,1) I.D. Adjusting otherwise worsen the errors.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -386,16 +381,6 @@ normal assumption.
 ## [1] -0.4385969
 \end{verbatim}
 
-Inspecting the EGARCH(2,2) S\&P 500 coefficients, I observe significant
-covariates. Notably the assymetric terms(gamma, and gamma2) are highly
-signifcant.
-
-Inspecting, the EGARCH(1,1) individaul secruity coefficients, I observe
-highly significant covariates with the expection of the long-run mean
-(mu). It would appear to indicate that there is no long-run
-mean-variance for this secruity--at least one estimated by statistically
-sound parameters.
-
 \begin{longtable}[c]{@{}lrrrr@{}}
 \toprule
 & Estimate & Std. Error & t value &
@@ -415,6 +400,15 @@ gamma2 & 0.2973042 & 0.0425145 & 6.993006 & 0.0000000\tabularnewline
 \bottomrule
 \end{longtable}
 
+Upon inspection of the EGARCH(2,2) S\&P 500 process, I observe highly
+significant covariates. Notably, the asymmetric terms(gamma(1),
+gamma(2)) are highly significant. It appears that the variance may be
+non-stationary. The beta(1) coefficient is nearly 1 with an extremely
+high t-stat---indicative of a random walk process. Intuitively this
+appears spurious---variance, one would expect, should not arbitrary
+depart and wander from a mean-level. All other coefficients appear
+proper.
+
 \begin{longtable}[c]{@{}lrrrr@{}}
 \toprule
 & Estimate & Std. Error & t value &
@@ -431,22 +425,50 @@ gamma1 & 1.4878254 & 0.0442731 & 33.6056502 & 0.0000000\tabularnewline
 \bottomrule
 \end{longtable}
 
-Now that i have finished estimating univariate variances, I am ready to
-incorporate this information into a multivariate DCC model. Although I
-had considered asymmetric variance dynamics in the previous EGARCH
-estimations, I discard an aDCC model due to its insignificant
-coefficients and non-intuitive understanding.
+Upon inspection of the EGARCH(1,1) individual security process, I
+observe mostly significant covariates. Again, the asymmetric term
+gamma(1) is highly significant. While the spurious beta coefficient is
+no longer observed, the mean-level error term (mu) is highly
+insignificant. Indicative of the aforementioned non-normal issues.
+Unlike the static S\&P 500 EGARCH(2,2) model, this EGARCH(1,1) model is
+fit to all individual securities and may not be the most appropriate
+process. However, given resource constraints I continue otherwise.
+\footnote{After continually running the entire analysis, a EGARCH(2,2)
+  S\&P 500 process in-conjunction with a GJR-GARCH(1,1) individual
+  security process produces the lowest error rate; I remain with the
+  EGARCH process however, given the robust diagnostic checks}
 
-``Include Equation description here''"
+\section{Analysis: Multivariate Dynamic Conditional
+Correlations}\label{analysis-multivariate-dynamic-conditional-correlations}
 
-Diagnostic checking here indicates that a mulitvariate DCC(1,1) model is
-the most suitable for this process, while higher orders models appear to
-have comproable BIC/AIC scores, and better fit to the skewed, non-normal
-data-- the higher order coefficients are insignicant and I fear that I
-risk overfitting at this point.
+With the estimated univariate EGARCH(2,2) and EGARCH(1,1) models, I am
+ready to incorporate the asymmetric conditional variance into a
+multivariate dynamically conditioned vector auto-regression (VAR).
+Intuitively, when the S\&P 500 index and individual security move in the
+same direction, as measured by variance and returns, the correlation
+increases slightly. The opposite holds if both the index and security
+move in opposite directions. As with variance estimations, correlations
+are assumed to only temporarily deviate from a long run mean---as
+indicated by the omega parameter. Further, given asymmetry in the
+correlation dynamics, these increased(decreased) correlations should be
+exacerbated in economic up(down) turns.
 
-After fitting the model, I construct the correlation matrix and
-terminate the parralel cluster.
+Thus, I consider both a DCC and an ADCC (asymmetric) VAR:
+
+\[\rho_{t} = \bar\rho(1-\alpha-\beta)+\alpha z_{1,t-1}z_{2,t-1} + \beta\rho_{t-1}\]
+
+\[\rho_{t} = \omega + \alpha z_{1,t-1}z_{2,t-1} + \gamma z_{1,t-1}z_{2,t-1}+(I_{z_{1t}<0})(I_{z_{2t}<0})+\beta\rho_{t-1}\]
+
+Diagnostic checks indicate that the asymmetric correlation term is
+insignificant for most pairs; I discard the ADCC model. Through AIC/BIC
+selection criteria, I determine that a DCC(1,1) model is most
+appropriate for the data.\footnote{While higher order DCC models have
+  comparable AIC/BIC scores and decreased residual errors, the higher
+  order lagged coefficients are deemed insignificant. With caution
+  towards over-fitting, I hold a DCC(1,1) process.}
+
+After fitting the model, I aggregate the correlation list into a matrix
+and terminate the parallel cluster.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -466,12 +488,13 @@ terminate the parralel cluster.
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{report_files/figure-latex/analysis232011-1.pdf}
+\begin{center}\includegraphics{report_files/figure-latex/analysis232011-1} \end{center}
 
-A mulivariate DCC(1,1) indicates that most coefficients are significant,
-although I believe I have spurious estimations for the X1/X2 Beta1
-coefficient. Individaul secruity coefficients appear to be weaker (X2
-variables) than the coefficients fit for the S\&P 500.
+Upon inspection, the multivariate DCC(1,1) VAR formed from a EGARCH(1,1)
+and EGARCH(2,2) process yields mostly significant coefficients. As
+previously discussed, several coefficients appear insignificant.
+Otherwise, the model appears to capture the dynamically conditioned
+correlation well.
 
 \begin{longtable}[c]{@{}lrrrr@{}}
 \toprule
@@ -508,8 +531,21 @@ Pr(\textgreater{}\textbar{}t\textbar{})\tabularnewline
 \bottomrule
 \end{longtable}
 
-Talka bouthuge matrix of correlationsh now and speak about finding top
-10 biggest
+\section{Analysis: Portfolio Evaluation
+I}\label{analysis-portfolio-evaluation-i}
+
+From the 20MB csv file containing the dynamically conditioned time
+varying correlation for all 474 securities, I select the ten-most
+correlated securities (to the S\&P 500) for each period. Put another
+way, for each period in the sample, I select the ten-most correlated
+securities; the ten-most correlated securities then form the mimicking
+portfolio. I lookup the returns for each security per period and equally
+weight each individual security's return against the entire portfolio.
+This is a rather naive approach; I am essentially equally weighting each
+security under the assumption that the overall portfolio will mirror the
+S\&P 500's returns well. A more pragmatic approach would be to optimally
+weight each individual security's return based upon some intrinsic
+property---say regime or security characteristic.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -533,23 +569,73 @@ Talka bouthuge matrix of correlationsh now and speak about finding top
 \end{Highlighting}
 \end{Shaded}
 
-Talk about errors and include big graph
+I now have a vector of portfolio returns for each period in the 10-year
+sample. I directly compare the performance and error\footnote{The
+  eval\$error vector stores the difference between the returns from the
+  portfolio and the S\&P 500, IE the `residual' error} of this portfolio
+to the S\&P 500 index.
 
-\begin{verbatim}
-## Warning: Removed 2 rows containing missing values (geom_path).
-
-## Warning: Removed 2 rows containing missing values (geom_path).
-\end{verbatim}
+\section{Analysis: Portfolio Evaluation
+II}\label{analysis-portfolio-evaluation-ii}
 
 \includegraphics{report_files/figure-latex/analysis23223d011-1.pdf}
 
-talk about getting the top 10 correlations per day
+The constructed portfolio adequately mimics the returns of the S\&P 500;
+the bottommost graph displays the constructed returns. The middle graph
+displays the S\&P 500 returns. And the topmost graph displays the
+portfolio returns superimposed against the S\&P 500 returns. The EGARCH
+DCC VAR selected portfolio adequately mirrors the S\&P 500 benchmark;
+however, during regimes of high volatility the residual errors are far
+greater than during periods of relatively tranquility. This is rather
+intuitive, correlation and variance are tough to estimate during highly
+unpredictably periods.
 
-\section{Conclusion}\label{conclusion}
+I now quantify the accuracy of the tracking portfolio via a Sharpe
+Ratio:
 
-Talk about naive weighting, introduce variable weighting, better model
-estimatoin, automatiion of GARCH selection (1,1) assumption, higher
-order DCC model?
+\[S_a = \frac{E[R_a-R_b]}{\sqrt{\mathrm{var}[R_a-R_b]}} * \sqrt{N}\]
+
+Where N = 221 (number of trading days), Ra = average return, and Rb =
+risk free rate
+
+The daily annualized Sharpe Ratio of the S\&P 500 Index over a 10-year
+sample is 0.2052 while the daily annualized Sharpe Ratio of the tracking
+portfolio is 0.2017. Given that the objective is to mimic the daily
+returns of the S\&P 500 (without considering volatility), it is
+unsurprising that the tracking portfolio performed worse. The benefits
+of diversification are lesser in a ten security portfolio.
+
+I now consider the performance of the tracking portfolio as compared to
+the S\&P 500, namely:
+
+\[0.05958 = \frac{E[0.0002585-0.0001821]}{\sqrt{\mathrm{var}[0.0002585-0.0001821]}} * \sqrt{221}\]
+
+Where, Ra= average return of formed portfolio, and Rb = average return
+of S\&P 500 benchmark
+
+The tracking portfolio, after considering returns and volatility,
+inadvertently outperforms the S\&P 500 index. Finally, I construct a
+loosely defined Sum of Square Residuals (SSR) metric. While this metric
+is not valuable in isolation---one must re-run the entire analysis and
+vary model parameters to achieve insight ---one can use it to compare
+across models. Given a multivariate DCC(1,1) \textasciitilde{}N(0,1)
+with univariate EGARCH(2,2) \textasciitilde{}N(0,1) and EGARCH(1,1)
+\textasciitilde{}N(0,1) process I achieve an `SSR' of 0.1836. \footnote{Given
+  multivariate DCC(1,1) \textasciitilde{}N(0,1) with either univariate
+  GJR-GARCH(2,2) \textasciitilde{}STD(0,1) and GJR-GARCH(1,1)
+  \textasciitilde{}STD(0,1) or GARCH(2,2) \textasciitilde{}N(0,1) and
+  GARCH(1,1) \textasciitilde{}N(0,1) this `SSR' reveals 0.1654 and
+  0.2043, respectively.}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{sum}\NormalTok{(((eval$error) **}\StringTok{ }\DecValTok{2}\NormalTok{), }\DataTypeTok{na.rm=}\OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 0.1835966
+\end{verbatim}
 
 \section{Appendix}\label{appendix}
 
@@ -653,7 +739,8 @@ order DCC model?
 \NormalTok{SecruityCleaner <-}\StringTok{ }\NormalTok{function(name, days)\{}
 
 \CommentTok{# Description}
-\CommentTok{# This utility script removes non-trading days from SecruityScraper and imputes missing values with the nearest value }
+\CommentTok{# This utility script removes non-trading days from SecruityScraper and imputes }
+  \CommentTok{#missing values with the nearest value }
 
 \CommentTok{# Arguments}
 \CommentTok{#'name' is the name of a csv file containing stock symbols to download #do not include .csv}
@@ -668,7 +755,8 @@ order DCC model?
 
 \CommentTok{# Other}
 
-\CommentTok{# Error "ERROR(expected) : undefined columns selected" is excpected as columns are removed and length of for-loop does not dynamically change}
+\CommentTok{# Error "ERROR(expected) : undefined columns selected" is excpected as columns are removed and }
+  \CommentTok{#length of for-loop does not dynamically change}
 
 \CommentTok{#setup environment}
 \NormalTok{raw <-}\StringTok{ }\KeywordTok{read.csv}\NormalTok{(}\KeywordTok{paste}\NormalTok{(name,}\StringTok{"-output.csv"}\NormalTok{, }\DataTypeTok{sep=}\StringTok{''}\NormalTok{))}
@@ -678,7 +766,8 @@ order DCC model?
 \CommentTok{# take out the non trading days aka weekends and holidays}
 \NormalTok{narows <-}\StringTok{ }\KeywordTok{as.numeric}\NormalTok{(}\KeywordTok{rownames}\NormalTok{(raw[}\KeywordTok{rowSums}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(raw))>=}\KeywordTok{dim}\NormalTok{(raw)[}\DecValTok{2}\NormalTok{]-}\DecValTok{10}\NormalTok{,])) }
 \NormalTok{raw <-}\StringTok{ }\NormalTok{raw[-narows,]}
-\NormalTok{U <-}\StringTok{ }\KeywordTok{dim}\NormalTok{(raw)[}\DecValTok{1}\NormalTok{]/}\DecValTok{365}\NormalTok{*(days}\DecValTok{-3}\NormalTok{) }\CommentTok{#number of years worth of data * number of non-trading days = max expected NAs #where 3 is a buffer}
+\NormalTok{U <-}\StringTok{ }\KeywordTok{dim}\NormalTok{(raw)[}\DecValTok{1}\NormalTok{]/}\DecValTok{365}\NormalTok{*(days}\DecValTok{-3}\NormalTok{) }\CommentTok{#number of years worth of data * number of non-trading days = }
+\CommentTok{#max expected NAs #where 3 is a buffer}
 \NormalTok{L <-}\StringTok{ }\KeywordTok{length}\NormalTok{(raw)}
 
 \CommentTok{#Remove secruites with missing observations}
@@ -691,7 +780,9 @@ order DCC model?
                       \KeywordTok{message}\NormalTok{(}\StringTok{"Remove (not enough observations): "}\NormalTok{, n)}
                         \NormalTok{raw <-}\StringTok{ }\NormalTok{raw[,-}\KeywordTok{c}\NormalTok{(n)]}
         \NormalTok{\}}
-    \NormalTok{\}, }\DataTypeTok{error=}\NormalTok{function(e)    \{}\CommentTok{#as columns are strunk, n becomes larger than initial column number set and produces errors at the end}
+    \NormalTok{\}, }\DataTypeTok{error=}\NormalTok{function(e)    \{}
+      \CommentTok{#as columns are strunk, n becomes larger than initial column number set }
+      \CommentTok{#and produces errors at the end}
     \KeywordTok{cat}\NormalTok{(}\StringTok{"ERROR(expected) :"}\NormalTok{,}\KeywordTok{conditionMessage}\NormalTok{(e), }\StringTok{"}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
     \NormalTok{\})}
 
@@ -704,8 +795,10 @@ order DCC model?
 \CommentTok{#Impute missing price levels with nearest price level}
 \NormalTok{for(n in }\DecValTok{2}\NormalTok{:L)\{}
 
-\NormalTok{raw[}\DecValTok{1}\NormalTok{,n] <-}\StringTok{ }\KeywordTok{ifelse}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(raw[}\DecValTok{1}\NormalTok{,n])==}\OtherTok{TRUE}\NormalTok{, }\KeywordTok{na.locf}\NormalTok{(raw[,n])[}\DecValTok{1}\NormalTok{], raw[}\DecValTok{1}\NormalTok{,n]) }\CommentTok{#place value in first }
-\NormalTok{raw[end,n] <-}\StringTok{ }\KeywordTok{ifelse}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(raw[end,n])==}\OtherTok{TRUE}\NormalTok{, }\KeywordTok{na.locf}\NormalTok{(raw[,n])[end], raw[end,n]) }\CommentTok{#place value in last}
+\CommentTok{#place value in first }
+\NormalTok{raw[}\DecValTok{1}\NormalTok{,n] <-}\StringTok{ }\KeywordTok{ifelse}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(raw[}\DecValTok{1}\NormalTok{,n])==}\OtherTok{TRUE}\NormalTok{, }\KeywordTok{na.locf}\NormalTok{(raw[,n])[}\DecValTok{1}\NormalTok{], raw[}\DecValTok{1}\NormalTok{,n]) }
+\CommentTok{#place value in last}
+\NormalTok{raw[end,n] <-}\StringTok{ }\KeywordTok{ifelse}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(raw[end,n])==}\OtherTok{TRUE}\NormalTok{, }\KeywordTok{na.locf}\NormalTok{(raw[,n])[end], raw[end,n]) }
 \NormalTok{raw[,n] <-}\StringTok{ }\KeywordTok{na.locf}\NormalTok{(raw[,n] ,}\DataTypeTok{fromlast=}\OtherTok{TRUE}\NormalTok{) }\CommentTok{# scrub NA from backwards}
 \KeywordTok{message}\NormalTok{(}\StringTok{"Imputing missing values with nearest value: "}\NormalTok{, n)}
 
@@ -723,6 +816,160 @@ order DCC model?
 \KeywordTok{write.csv}\NormalTok{(raw, }\DataTypeTok{file =} \KeywordTok{paste}\NormalTok{(name,}\StringTok{"-output-clean.csv"}\NormalTok{, }\DataTypeTok{sep=}\StringTok{''}\NormalTok{))}
 
 \NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{rm}\NormalTok{(}\DataTypeTok{list=}\KeywordTok{ls}\NormalTok{(}\DataTypeTok{all=}\OtherTok{TRUE}\NormalTok{))}
+\KeywordTok{options}\NormalTok{(}\StringTok{"width"}\NormalTok{=}\DecValTok{200}\NormalTok{)}
+\KeywordTok{options}\NormalTok{(}\DataTypeTok{scipen=}\DecValTok{999}\NormalTok{)}
+\KeywordTok{options}\NormalTok{(}\DataTypeTok{digits=}\DecValTok{4}\NormalTok{)}
+\NormalTok{wkdir <-}\StringTok{ "/home/johnconnor/projecthedge/"}
+\NormalTok{lbdir <-}\StringTok{ "/home/johnconnor/projecthedge/lib/"}
+\NormalTok{datdir <-}\StringTok{ "/home/johnconnor/projecthedge/data/"}
+
+\NormalTok{##Set Parameters}
+\NormalTok{enddate <-}\StringTok{ }\KeywordTok{Sys.Date}\NormalTok{()}
+\NormalTok{startdate <-}\StringTok{ }\NormalTok{enddate -}\StringTok{ }\DecValTok{365}\NormalTok{*}\DecValTok{10} \CommentTok{#appox 10 years of data, not counting trading days}
+
+\CommentTok{#Load required libraries & utility scripts}
+\KeywordTok{setwd}\NormalTok{(lbdir)}
+\KeywordTok{library}\NormalTok{(Quandl)}
+\KeywordTok{library}\NormalTok{(zoo)}
+\KeywordTok{library}\NormalTok{(ggplot2)}
+\KeywordTok{library}\NormalTok{(rmgarch)}
+\KeywordTok{library}\NormalTok{(parallel)}
+\KeywordTok{require}\NormalTok{(rugarch)            }
+\KeywordTok{require}\NormalTok{(gridExtra)}
+\KeywordTok{library}\NormalTok{(moments)}
+\KeywordTok{source}\NormalTok{(}\StringTok{"secruityscraper.R"}\NormalTok{)}
+\KeywordTok{source}\NormalTok{(}\StringTok{"secruitycleaner.R"}\NormalTok{)}
+\KeywordTok{setwd}\NormalTok{(datdir)}
+
+\NormalTok{raw <-}\StringTok{ }\KeywordTok{read.csv}\NormalTok{(}\StringTok{"SP500-output-clean.csv"}\NormalTok{)}
+\NormalTok{dates <-}\StringTok{ }\NormalTok{raw$date}
+\NormalTok{raw <-}\StringTok{ }\NormalTok{raw[,-}\KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{)]}
+\CommentTok{#append S&P 500 for comparision}
+\NormalTok{sp <-}\StringTok{ }\KeywordTok{Quandl}\NormalTok{(}\StringTok{"YAHOO/INDEX_GSPC"}\NormalTok{, }\DataTypeTok{start_date=}\NormalTok{startdate, }\DataTypeTok{end_date=}\NormalTok{enddate)}
+\NormalTok{sp <-}\StringTok{ }\NormalTok{sp[-}\KeywordTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{,}\DecValTok{3}\NormalTok{,}\DecValTok{4}\NormalTok{,}\DecValTok{6}\NormalTok{,}\DecValTok{7}\NormalTok{)] }\CommentTok{#keep only dates and close date}
+\NormalTok{sp <-}\StringTok{ }\NormalTok{sp[}\KeywordTok{order}\NormalTok{(sp$Date),] }\CommentTok{#reorder data}
+\NormalTok{rows <-}\StringTok{ }\KeywordTok{match}\NormalTok{(}\KeywordTok{as.character}\NormalTok{(sp[,}\DecValTok{1}\NormalTok{]),}\KeywordTok{as.character}\NormalTok{(raw[,}\DecValTok{1}\NormalTok{])) }\CommentTok{#match SP levels to clean dataset}
+\NormalTok{raw <-}\StringTok{ }\NormalTok{raw[rows,]}
+\NormalTok{dates <-}\StringTok{ }\NormalTok{dates[rows]}
+\NormalTok{raw$SP500 <-}\StringTok{ }\NormalTok{sp[,}\DecValTok{2}\NormalTok{] }\CommentTok{#append S&P 500 to vector list}
+
+\CommentTok{#Convert data to log level and take difference}
+\NormalTok{data <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(}\KeywordTok{apply}\NormalTok{(raw[,-}\DecValTok{1}\NormalTok{], }\DataTypeTok{MARGIN=}\DecValTok{2}\NormalTok{, log)) }\CommentTok{#convert to log prices}
+\NormalTok{data$Date <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(dates)}
+
+\CommentTok{#Difference log prices to find returns }
+\NormalTok{rtrn <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(}\KeywordTok{apply}\NormalTok{(data[,-}\KeywordTok{dim}\NormalTok{(data)[}\DecValTok{2}\NormalTok{]], }\DataTypeTok{MARGIN=}\DecValTok{2}\NormalTok{, diff)) }\CommentTok{#take difference of log prices}
+\NormalTok{rtrn$Date <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(dates[-}\DecValTok{1}\NormalTok{])}
+\KeywordTok{rownames}\NormalTok{(rtrn) <-}\StringTok{ }\NormalTok{sp$Date[-}\DecValTok{1}\NormalTok{]}
+
+\CommentTok{#Method 1 Compute Correlation Matrix}
+\NormalTok{L <-}\StringTok{ }\KeywordTok{dim}\NormalTok{(rtrn)[}\DecValTok{2}\NormalTok{]-}\DecValTok{2} \CommentTok{#all secruities minus SP500 and dates}
+ \CommentTok{#Create data.frame for time conditional variance}
+\NormalTok{timevarcor <-}\StringTok{ }\KeywordTok{matrix}\NormalTok{(}\DataTypeTok{ncol=}\NormalTok{L, }\DataTypeTok{nrow=}\KeywordTok{dim}\NormalTok{(rtrn)[}\DecValTok{1}\NormalTok{]-}\DecValTok{2}\NormalTok{)}
+\KeywordTok{colnames}\NormalTok{(timevarcor) <-}\StringTok{ }\KeywordTok{head}\NormalTok{(}\KeywordTok{colnames}\NormalTok{(rtrn), -}\DecValTok{2}\NormalTok{) }\CommentTok{#all secruites minus SP500 and dates}
+\KeywordTok{rownames}\NormalTok{(timevarcor) <-}\StringTok{ }\KeywordTok{head}\NormalTok{(rtrn$Date,-}\DecValTok{2}\NormalTok{)}
+
+\CommentTok{#Create parallel environment for each iteration}
+\NormalTok{cl <-}\StringTok{ }\KeywordTok{makeCluster}\NormalTok{(}\KeywordTok{min}\NormalTok{(}\KeywordTok{detectCores}\NormalTok{(),}\DecValTok{5}\NormalTok{),}\DataTypeTok{type=}\KeywordTok{ifelse}\NormalTok{(.Platform$OS.type==}\StringTok{"unix"}\NormalTok{,}\StringTok{"FORK"}\NormalTok{,}\StringTok{"PSOCK"}\NormalTok{))}
+
+\NormalTok{for(n in }\DecValTok{1}\NormalTok{:L)\{}
+    \CommentTok{#n<-1}
+        \NormalTok{###Create data.frame for models #subtract 1 because of differencing}
+        \NormalTok{moddata <-}\StringTok{ }\KeywordTok{matrix}\NormalTok{(}\DataTypeTok{ncol=}\DecValTok{2}\NormalTok{, }\DataTypeTok{nrow=}\KeywordTok{dim}\NormalTok{(rtrn)[}\DecValTok{1}\NormalTok{]-}\DecValTok{1}\NormalTok{)}
+        \NormalTok{moddata[,}\DecValTok{1}\NormalTok{] <-}\StringTok{ }\KeywordTok{head}\NormalTok{(rtrn[,}\StringTok{"SP500"}\NormalTok{],-}\DecValTok{1}\NormalTok{)}
+        \NormalTok{moddata[,}\DecValTok{2}\NormalTok{] <-}\StringTok{ }\KeywordTok{head}\NormalTok{(rtrn[,n],-}\DecValTok{1}\NormalTok{)}
+        \KeywordTok{rownames}\NormalTok{(moddata) <-}\StringTok{ }\KeywordTok{head}\NormalTok{(rtrn$Date,-}\DecValTok{1}\NormalTok{)}
+        \NormalTok{moddata <-}\StringTok{ }\NormalTok{moddata[-}\KeywordTok{nrow}\NormalTok{(moddata),] }\CommentTok{#remove last row}
+        \NormalTok{moddata <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(moddata)}
+
+        \CommentTok{#Build parameters for market GARCH}
+        \NormalTok{spec1 <-}\StringTok{ }\KeywordTok{ugarchspec}\NormalTok{(}\DataTypeTok{variance.model =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{model =} \StringTok{"eGARCH"}\NormalTok{, }\DataTypeTok{garchOrder =} \KeywordTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{,}\DecValTok{2}\NormalTok{)),}
+                                \DataTypeTok{distribution.model=} \StringTok{"norm"}\NormalTok{)}
+        \CommentTok{#Build parameters for secruity GARCH}
+        \NormalTok{spec2 <-}\StringTok{ }\KeywordTok{ugarchspec}\NormalTok{(}\DataTypeTok{variance.model =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{model =} \StringTok{"eGARCH"}\NormalTok{, }\DataTypeTok{garchOrder =} \KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{)),}
+                                \DataTypeTok{distribution.model=} \StringTok{"norm"}\NormalTok{)}
+        
+        \CommentTok{#Fit GARCH models}
+        \NormalTok{garch1 <-}\StringTok{ }\KeywordTok{ugarchfit}\NormalTok{(}\DataTypeTok{spec=}\NormalTok{spec1, }\DataTypeTok{data=}\NormalTok{moddata[,}\DecValTok{1}\NormalTok{], }\DataTypeTok{solver.control =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{trace=}\DecValTok{0}\NormalTok{), }
+                            \DataTypeTok{cluster=}\NormalTok{cl)}
+        \NormalTok{garch2 <-}\StringTok{ }\KeywordTok{try}\NormalTok{(}\KeywordTok{ugarchfit}\NormalTok{(}\DataTypeTok{spec=}\NormalTok{spec2, }\DataTypeTok{data=}\NormalTok{moddata[,}\DecValTok{2}\NormalTok{], }\DataTypeTok{solver.control =} \KeywordTok{list}\NormalTok{(}\DataTypeTok{trace=}\DecValTok{0}\NormalTok{), }
+                                \DataTypeTok{cluster=}\NormalTok{cl), }\DataTypeTok{silent=}\OtherTok{TRUE}\NormalTok{)}
+
+        \CommentTok{#Build parameters for DCC model }
+        \NormalTok{dccspec <-}\StringTok{ }\KeywordTok{dccspec}\NormalTok{(}\DataTypeTok{VAR=}\OtherTok{TRUE}\NormalTok{, }\DataTypeTok{uspec =} \KeywordTok{multispec}\NormalTok{(}\KeywordTok{c}\NormalTok{(spec1, spec2)), }\DataTypeTok{dccOrder =} \KeywordTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }
+                           \DataTypeTok{distribution =} \StringTok{"mvnorm"}\NormalTok{)}
+
+        \CommentTok{#Fit DCC model}
+        \NormalTok{dcc <-}\StringTok{ }\KeywordTok{try}\NormalTok{(}\KeywordTok{dccfit}\NormalTok{(dccspec, }\DataTypeTok{data =} \NormalTok{moddata, }\DataTypeTok{fit.control=}\KeywordTok{list}\NormalTok{(}\DataTypeTok{scale=}\OtherTok{TRUE}\NormalTok{), }
+                          \DataTypeTok{cluster=}\NormalTok{cl), }\DataTypeTok{silent=}\OtherTok{TRUE}\NormalTok{)}
+
+        \KeywordTok{tryCatch}\NormalTok{(\{}
+
+            \KeywordTok{plot}\NormalTok{(dcc, }\DataTypeTok{which=}\DecValTok{4}\NormalTok{)}
+            \NormalTok{corrmatrix <-}\StringTok{ }\KeywordTok{rcor}\NormalTok{(dcc, }\DataTypeTok{type=}\StringTok{"R"}\NormalTok{)}
+            \NormalTok{corrmatrix <-}\StringTok{ }\KeywordTok{zoo}\NormalTok{(corrmatrix[}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{,], }\DataTypeTok{order.by=}\KeywordTok{as.Date}\NormalTok{(}\KeywordTok{rownames}\NormalTok{(moddata)))}
+            \NormalTok{timevarcor[,n] <-}\StringTok{ }\NormalTok{corrmatrix}
+
+        \NormalTok{\}, }\DataTypeTok{error=}\NormalTok{function(e) \{}\KeywordTok{cat}\NormalTok{(}\StringTok{"ERROR :"}\NormalTok{,}\KeywordTok{conditionMessage}\NormalTok{(e), }\StringTok{"}\CharTok{\textbackslash{}n}\StringTok{"}\NormalTok{)}
+        \NormalTok{\})}
+
+        \KeywordTok{message}\NormalTok{(}\StringTok{"Calculating Time Varying Correlation for Secruity: "}\NormalTok{, n, }\StringTok{"/"}\NormalTok{, L)}
+    
+\NormalTok{\}}
+
+\KeywordTok{stopCluster}\NormalTok{(cl)}
+
+\NormalTok{top10names <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(timevarcor[,-}\DecValTok{1}\NormalTok{], }\DataTypeTok{MARGIN=}\DecValTok{1}\NormalTok{, }
+                    \DataTypeTok{FUN=}\NormalTok{function(x) }\KeywordTok{names}\NormalTok{(}\KeywordTok{head}\NormalTok{(}\KeywordTok{sort}\NormalTok{(x, }\DataTypeTok{decreasing=}\OtherTok{TRUE}\NormalTok{),}\DecValTok{10}\NormalTok{)))}
+\NormalTok{low10names <-}\StringTok{ }\KeywordTok{apply}\NormalTok{(timevarcor[,-}\DecValTok{1}\NormalTok{], }\DataTypeTok{MARGIN=}\DecValTok{1}\NormalTok{, }
+                    \DataTypeTok{FUN=}\NormalTok{function(x) }\KeywordTok{names}\NormalTok{(}\KeywordTok{head}\NormalTok{(}\KeywordTok{sort}\NormalTok{(x, }\DataTypeTok{decreasing=}\OtherTok{FALSE}\NormalTok{),}\DecValTok{10}\NormalTok{)))}
+
+\CommentTok{#Compare returns against SP&500 Returns}
+\NormalTok{L <-}\StringTok{ }\KeywordTok{dim}\NormalTok{(top10names)[}\DecValTok{2}\NormalTok{]}
+\NormalTok{eval <-}\StringTok{ }\KeywordTok{data.frame}\NormalTok{(}\DataTypeTok{Date=}\NormalTok{sp$Date[-}\DecValTok{1}\NormalTok{])}
+\NormalTok{eval$SP500 <-}\StringTok{ }\NormalTok{rtrn[,}\DecValTok{474}\NormalTok{]}
+\NormalTok{eval$benchmark <-}\StringTok{ }\OtherTok{NA}
+\NormalTok{for(n in }\DecValTok{1}\NormalTok{:L)\{}
+    \NormalTok{date <-}\StringTok{ }\KeywordTok{names}\NormalTok{(top10names[}\DecValTok{1}\NormalTok{,n])}
+    \NormalTok{topstocks <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(top10names[,n])}
+    \NormalTok{lowstocks <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(low10names[,n])}
+
+    \NormalTok{eval$benchmark[n] <-}\StringTok{ }\KeywordTok{mean}\NormalTok{(}\KeywordTok{as.numeric}\NormalTok{(rtrn[date,topstocks]))}
+\NormalTok{\}}
+\NormalTok{eval$error <-}\StringTok{ }\NormalTok{eval$SP500 -}\StringTok{ }\NormalTok{eval$benchmark}
+
+\CommentTok{#Visual Representation}
+\NormalTok{plot1 <-}\StringTok{    }\KeywordTok{ggplot}\NormalTok{() +}
+\StringTok{            }\KeywordTok{geom_line}\NormalTok{(}\DataTypeTok{data =} \NormalTok{eval, }\KeywordTok{aes}\NormalTok{(}\DataTypeTok{x =} \NormalTok{Date, }\DataTypeTok{y =} \NormalTok{SP500, }\DataTypeTok{color =} \StringTok{'SP500'}\NormalTok{), }
+                      \DataTypeTok{color=}\StringTok{'firebrick'}\NormalTok{) +}
+\StringTok{            }\KeywordTok{geom_line}\NormalTok{(}\DataTypeTok{data =} \NormalTok{eval, }\KeywordTok{aes}\NormalTok{(}\DataTypeTok{x =} \NormalTok{Date, }\DataTypeTok{y =} \NormalTok{benchmark, }\DataTypeTok{color =} \StringTok{'Benchmark'}\NormalTok{), }
+                      \DataTypeTok{alpha=}\FloatTok{0.4}\NormalTok{, }\DataTypeTok{color=}\StringTok{'slateblue'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ggtitle}\NormalTok{(}\StringTok{"Benchmark Superimposed on SP500"}\NormalTok{) +}\StringTok{ }
+\StringTok{                }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{plot.title =} \KeywordTok{element_text}\NormalTok{(}\DataTypeTok{lineheight=}\NormalTok{.}\DecValTok{8}\NormalTok{, }\DataTypeTok{face=}\StringTok{"bold"}\NormalTok{)) +}
+\StringTok{                }\KeywordTok{labs}\NormalTok{(}\DataTypeTok{color =} \StringTok{"Legend"}\NormalTok{) +}
+\StringTok{                }\KeywordTok{xlab}\NormalTok{(}\StringTok{'Date'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ylab}\NormalTok{(}\StringTok{'Price Levels'}\NormalTok{)}
+
+\NormalTok{plot2 <-}\StringTok{ }\KeywordTok{ggplot}\NormalTok{() +}\StringTok{ }\KeywordTok{geom_line}\NormalTok{(}\DataTypeTok{data =} \NormalTok{eval, }\KeywordTok{aes}\NormalTok{(}\DataTypeTok{x =} \NormalTok{Date, }\DataTypeTok{y =} \NormalTok{SP500, }\DataTypeTok{color =} \StringTok{'SP500'}\NormalTok{), }
+                              \DataTypeTok{color=}\StringTok{'firebrick'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ggtitle}\NormalTok{(}\StringTok{"SP500"}\NormalTok{) +}\StringTok{ }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{plot.title =} \KeywordTok{element_text}\NormalTok{(}\DataTypeTok{lineheight=}\NormalTok{.}\DecValTok{4}\NormalTok{, }\DataTypeTok{face=}\StringTok{"bold"}\NormalTok{)) +}
+\StringTok{                }\KeywordTok{labs}\NormalTok{(}\DataTypeTok{color =} \StringTok{"Legend"}\NormalTok{) +}
+\StringTok{                }\KeywordTok{xlab}\NormalTok{(}\StringTok{'Date'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ylab}\NormalTok{(}\StringTok{'Price Levels'}\NormalTok{)}
+
+\NormalTok{plot3 <-}\StringTok{ }\KeywordTok{ggplot}\NormalTok{() +}\StringTok{ }\KeywordTok{geom_line}\NormalTok{(}\DataTypeTok{data =} \NormalTok{eval, }\KeywordTok{aes}\NormalTok{(}\DataTypeTok{x =} \NormalTok{Date, }\DataTypeTok{y =} \NormalTok{benchmark, }
+                                    \DataTypeTok{color =} \StringTok{'Benchmark'}\NormalTok{), }\DataTypeTok{color=}\StringTok{'slateblue'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ggtitle}\NormalTok{(}\StringTok{"Top 10 Correlated Secruities"}\NormalTok{) +}\StringTok{ }
+\StringTok{                            }\KeywordTok{theme}\NormalTok{(}\DataTypeTok{plot.title =} \KeywordTok{element_text}\NormalTok{(}\DataTypeTok{lineheight=}\NormalTok{.}\DecValTok{4}\NormalTok{, }\DataTypeTok{face=}\StringTok{"bold"}\NormalTok{)) +}
+\StringTok{                }\KeywordTok{labs}\NormalTok{(}\DataTypeTok{color =} \StringTok{"Legend"}\NormalTok{) +}
+\StringTok{                }\KeywordTok{xlab}\NormalTok{(}\StringTok{'Date'}\NormalTok{) +}
+\StringTok{                }\KeywordTok{ylab}\NormalTok{(}\StringTok{'Price Levels'}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 

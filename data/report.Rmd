@@ -1,6 +1,5 @@
-
 ---
-title: Mimicing S&P 500 Returns via eGARCH and DCC models
+title: Portfolio Creation | Mimicking 10-Year S&P 500 Returns via DCC Multivariate EGARCH Processes 
 author:
   - name: Nathan Matare
 
@@ -12,12 +11,12 @@ address:
     address: nmatare@chicagobooth.edu
     
 abstract: |
-  Create a portfolio that best mimics the monthly returns of the S&P 500 Index over the past 10 years and does not hold more than 10 securities at any one time. Securities may consist of individual company stocks and not funds or any other type of investment vehicle.
+  Create a portfolio that best mimics the daily returns of the S&P 500 Index over the past 10 years and does not hold more than 10 securities at any one time. Securities may consist of individual company stocks and not funds nor any other type of investment vehicle.
 
 output: rticles::elsevier_article
 ---
 
-```{r setup, include=FALSE, cache=FALSE}
+```{r setup, include=FALSE, cache=TRUE}
 
 rm(list=ls(all=TRUE))
 options("width"=200)
@@ -161,22 +160,23 @@ plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 
 Methodology
 ==========================
 
-In order to appropiately mimic the daily returns of the S&P 500, one must isolate secruities whose returns are "most like" the S&P 500 at any given point in time. By selecting ten secruites who most mirror the index, one can form a comparable(in returns) profolio.
+I will mimic the daily returns of the S&P 500 by isolating and holding ten securities whose returns are most similar to the S&P 500 during each period. This is a non-trivial process, thus I employ Dynamic Conditional Correlation (DCC) Multivariate Exponential Generalized Autoregressive Conditional Heteroscedasticity (EGARCH) models to identify and isolate similar return-yielding securities for each period throughout the 10-year sample. 
 
-Whily various metrics such as cointegration and PCA could be considered as a similarity criterion, I employ dynamic time varying conditional correlation (DCC) models in order to find and select the most benefical secruties. This is a non-trivial process; I outline five steps:
+The process outline is such:
 
+1. Collect daily price levels on S&P 500 secruities;
+2. Clean and pre-process data;
+3. Estimate time varying conditional correlation via eGARCH and DCC models;
+4. Isolate the top-ten most correlated securities and form a daily  portfolio; and
+5. Compare portfolio returns to S&P 500 returns.
 
-1. Collect daily stock level prices on S&P 500 secruities
-2. Clean and pre-process data
-3. Estimate time varying conditional correlation via eGARCH and DCC models
-4. Isolate the top-ten most correlated secruites and form a daily profolio
-5. Compare profolio returns to S&P 500 returns
+Project Summary:
 
-First, a targeted universe of secruities is generated. Secondly, the raw price levels are cleaned, pre-processed, and transformed in order to faciliate smooth analysis. I next consider several GARCH models^[GARCH, APARCH, GJG-GARCH, EGARCH are considered] in order to accurately capture the variance dynamics of each time series; after compleletion, an appropiate VAR DCC model is fit to the secruity and market timeseries. Next, the top-ten most correlated secruties are selected and used as the basis for a daily profolio. Finally, the profolio returns are compared against daily S&P 500 returns. 
+First, a targeted universe of securities is generated. Next, raw price levels are cleaned, logged, and first-order integrated. Several GARCH models are considered ^[SGARCH, APARCH, GJR-GARCH, EGARCH] in order to best capture the variance dynamics in each time series. After completion, an appropriate VAR DCC model is fit to the security and market time-series data. Next, the top-ten most correlated securities are selected and inputed into the final portfolio. Finally, the portfolio returns are compared against the daily S&P 500 returns. 
 
 Collect Daily Price Levels
 ============
-I begin by compiling all stocks currrently listed on the S&P 500. These stocks constitute a 'universe' of secruities, and form the basis of candidate secruites. In order to expediate the data collection process, I write a function "SecruityScraper"^[See appendix for additional information] to scrape daily price level data for the past 10 years.^[See [Quandl](https://www.quandl.com/data/WIKI) datasets]
+I begin by compiling a list of all stocks currently listed on the S&P 500. These stocks constitute the 'universe of securities' and form the basis of candidate stocks. In order to expedite the collection of granular price series data, I program the function “SecurityScraper” ^[See appendix for additional information] to integrate with Quandl.com's API and scrape daily price level data for the past 10 years.^[See [Quandl](https://www.quandl.com/data/WIKI) datasets]
 
 ```{r step1, eval=FALSE, include=TRUE, cache=TRUE}
 
@@ -191,28 +191,23 @@ SecruityScraper(name="SP500",
 
 Collect Daily Price Levels
 ============
-Because the raw data contains weekends, holidays, and missing observations it is necessary to clean and preprocess the data in order to faciliate smooth analysis. I write another function, "SecruityCleaner"^[See appendix for additional information] to clean the data. ^[Missing observations are imputed with either the nearest column value or column mean, depedent on the situation, see appendix for code logic] Secruites that have too few observations are removed from the candidate pool; the universe of secruties totals 474.
+The collected 10MB raw dataset contains weekends, holidays, and missing observations. It is necessary to clean and pre-process the data in order to facilitate smooth analysis. I deploy another function, "SecruityCleaner" ^[See appendix for additional information] to clean the data. ^[Missing observations are imputed with either the nearest column value or column mean, dependent on the situation, see appendix for code logic] Securities with too few observations are removed from the candidate pool; the universe of potential securities totals 474 stocks with 2514 daily observations.
 
 ```{r step1.1, eval=FALSE, results="hide", include=TRUE}
 source("secruitycleaner.R")
 SecruityCleaner(name="SP500", days=144)
 ```
 
-During this step, I append daily S&P 500 price levels in order to compare the returns of the formed profolio against the index. 
+Additionally, I append daily S&P 500 price levels to the dataset:
 
 ```{r step1.2, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
 
 sp <- Quandl("YAHOO/INDEX_GSPC", start_date=startdate, end_date=enddate)
-
 rows <- match(as.character(sp[,1]), as.character(raw[,1])) #match SP levels to clean dataset
-
 raw$SP500 <- sp[,2] #append S&P 500 to vector 
 ```
 
-The dataset now contains the entire universe of cleaned secruties and S&P 500 price levels. I further manipulate the data by taking the natural log of the price levels; after differencing the data, I am able to take advantage of a natural property of logs. I now have a continously compounded time series.
-
-\[r=ln(p_{t}) - ln(p_{t-1})\]
-
+Now that the dataset contains the entire universe of cleaned price levels, I further transform the data via a natural log and first-order integration. Such transformation grants an advantageous property of approximating continuously compounding returns: \[r=ln(p_{t}) - ln(p_{t-1})\]
 
 ```{r step1.3, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
 #Convert data to log level and take difference
@@ -227,41 +222,34 @@ rownames(rtrn) <- sp$Date[-1]
 ```
 
 
-Analysis: Univariate Variances
+Analysis: Univariate Variance Modeling 
 ============
 
-This analysis will become computationally expensive. I create a parallel environment in order to increase the speed of computation.
+The following analysis will become computationally expensive, I instantiate a parallel environment to increase the speed of computation. 
 
 ```{r analysis1, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
-
 library(parallel)
-cl <- makeCluster(min(detectCores(),5),
-      type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
-
+cl <- makeCluster(min(detectCores(),5), type=ifelse(.Platform$OS.type=="unix","FORK","PSOCK"))
 ```
 
-In order to fit DCC models to each respective secruity and S&P 500 index, I first estimate two univariate GARCH models in order to capture the variance dynamics of each series. 
-
-I observe non-normality upon inspection of the raw logged returns. That is, a fat left-tail. Given this non-normality, it may be that I must relax normality assumption on my GARCH episolon errors and choose a more appropiate distribution.
+Before fitting GARCH models, I inspect several return series. For the S&P 500 series, I observe non-normality, heavy kurtosis, and slight negative skew. Given that standard GARCH models assume ~N(0,1) errors, I caution against the standard model—it may be necessary to adjust the distribution parameters to account for the skewed non-normality. Similar analysis and conclusions follow for individual stock variance distributions. 
 
 ```{r analysis11, echo=FALSE, eval=TRUE, include=TRUE}
+library(moments)
 hist(moddata[,1], col="lightblue", main="Histogram of Differenced Logged Returns", xlab="Returns")
 ```
 ```{r analysis111, echo=TRUE, eval=TRUE, include=TRUE}
-library(moments)
 kurtosis(moddata[,1])
 skewness(moddata[,1])
 ```
 
-I consider asymettric EGARCH, GJG-GARCH, APARCH models and the GARCH model while varying lagged orders and error distributions: (normal, normal-skewed, t-distribution, t-skewed) before settling on a EGARCH(2,2) for the S&P 500 index and a EGARCH(1,1) for all individual secruities. 
+Thus, to account for non-normality and left skew, I vary model parameters in an attempt to capture the underlying dynamics. I begin by adjusting distribution parameters: normal, normal-skewed, t-distribution, t-skewed; before settling on a normal distribution. It appears that while the data may not be perfectly normal—the normal distribution, in-fact, captures the underlying process more sufficiently than any other available distribution. 
 
-put in latex for EGARCH model
+Further, standard GARCH models assume symmetry between negative and positive returns. That is, previous period positive returns affect current period variance at the same magnitude as previous period negative returns. However, empirical research suggests otherwise; indeed, previous period negative returns affect current period variance at a greater magnitude than previous period positive returns. Thus, I introduce several asymmetric models, namely: EGARCH, GJR-GARCH, APARCH^[http://public.econ.duke.edu/~boller/Papers/glossary_arch.pdf], before determining through model diagnostics that an exponential GARCH is the best candidate.^[While an GJR-GARCH process fit the series better—matrix singularities when the model is piped into the VAR DCC model force me to select an EGARCH process]
 
-It is unsurprising that an assymetric model works well here; times of high variance correlation etc... talk about what the model is doing.
+\[\log\sigma_{t}^2=\omega+\sum_{k=1}^{q}\beta_{k}g(Z_{t-k})+\sum_{k=1}^{p}\alpha_{k}\log\sigma_{t-k}^{2}\]
 
-Due to computational and time limitations, I blanket an EGARCH(1,1) to all individual secruites; while most GARCH processes are of either order (1,1) or (2,2), I have drawn a blanket statement and assummed that all secruites will follow this process. This is highly uncertain.
-
-In fact, through dianoistic checking I determine that an GRG-GARCH(1,1) fits mosts series better than any other GARCH process; however when piping the assymetric process into a DCC model, inverse singular matrix errors force adoptation of a slightly less complicated model. 
+Although I am able to manually determine that an EGARCH(2,2) process passes all diagnostic tests and fits the S&P 500 series sufficiently, it is time prohibitive to replicate this manual process for all individual secruities. I could automate this process and select the most advantageous EGARCH(p,q) model based upon residual, autocorrelation function (ACF), partial autocorrelation function (PACF), and information criteria; but given time constraints, I settle on an EGARCH(1,1) process for all individual securities. 
 
 ```{r analysis1.2, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
 
@@ -271,45 +259,36 @@ require(rugarch)
 #Build parameters for market GARCH
 		spec1 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(2,2)),
 								distribution.model= "norm")
-		
 #Build parameters for secruity GARCH
 		spec2 <- ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1,1)),
 								distribution.model= "norm")
-
 #Fit GARCH models
 		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), 
 		                    cluster=cl)
 		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), 
 		                    cluster=cl), silent=TRUE)
-
 ```
 
-Before continuing, I conduct several quick diagnostic checks. My S&P 500 EGARCH(2,2) process captures all serial correlation in the time series. While I cannot confirm that each individaul secruity follows a EGARCH(1,1) process, I accept this assumption given time and computational constrains and proceed with the analysis.
+Graphic displays of diagnostic checks and assumptions follow:^[The dates in the below plots are incorrect; the rmgarch package has an error that defaults to this time period]
 
-```{r analysis201, echo=FALSE, eval=TRUE, include=TRUE}
+```{r analysis201, echo=FALSE, eval=TRUE, include=TRUE, cache=TRUE}
 plot(garch1, which=1)
 ```
 
-```{r analysis20df1, echo=FALSE, eval=TRUE, include=TRUE}
+```{r analysis20df1, echo=FALSE, eval=TRUE, include=TRUE, cache=TRUE}
 plot(garch1, which=8)
 ```
 
-```{r analysis2031, echo=FALSE, eval=TRUE, include=TRUE}
+```{r analysis2031, echo=FALSE, eval=TRUE, include=TRUE, cache=TRUE}
 plot(garch1, which=11)
 ```
 
-Although heavy left skew remains in my residuals--indicative of a less-than-perfect fit ARCH model, these are the best results I am able to get. 
-
-While the residual errors are not perfectly normally distributed, relaxing the assumption and estimating student-t or skewed-normal distrubtion worsens the kurtosis and skewness. I proceed under the normal assumption. 
+As discussed previously, residual diagnostics reveal that the errors are not ~N(0,1) I.D. Adjusting otherwise worsen the errors.
 
 ```{r analysis20121, echo=TRUE, eval=TRUE, include=TRUE}
 kurtosis(garch1@fit$residuals)
 skewness(garch1@fit$residuals)
 ```
-
-Inspecting the EGARCH(2,2) S&P 500 coefficients, I observe significant covariates. Notably the assymetric terms(gamma, and gamma2) are highly signifcant.
-
-Inspecting, the EGARCH(1,1) individaul secruity coefficients, I observe highly significant covariates with the expection of the long-run mean (mu). It would appear to indicate that there is no long-run mean-variance for this secruity--at least one estimated by statistically sound parameters. 
 
 ```{r analysis-check24, echo=FALSE, include=TRUE}
 
@@ -318,6 +297,8 @@ knitr::kable(table)
 #Bayesian Information Criteria -6.4006
 ```
 
+Upon inspection of the EGARCH(2,2) S&P 500 process, I observe highly significant covariates. Notably, the asymmetric terms(gamma(1), gamma(2)) are highly significant. It appears that the variance may be non-stationary. The beta(1) coefficient is nearly 1 with an extremely high t-stat—indicative of a random walk process. Intuitively this appears spurious—variance, one would expect, should not arbitrary depart and wander from a mean-level. All other coefficients appear proper. 
+
 ```{r analysis-check34, echo=FALSE, include=TRUE}
 
 table2 <- garch2@fit$matcoef
@@ -325,16 +306,23 @@ knitr::kable(table2)
 #Bayesian Information Criteria -6.4305
 
 ```
-Analysis: Multivariate Conditional Correlations
+
+Upon inspection of the EGARCH(1,1) individual security process, I observe mostly significant covariates. Again, the asymmetric term gamma(1) is highly significant. While the spurious beta coefficient is no longer observed, the  mean-level error term (mu) is highly insignificant. Indicative of the aforementioned non-normal issues. Unlike the static S&P 500 EGARCH(2,2) model, this EGARCH(1,1) model is fit to all individual securities and may not be the most appropriate process. However, given resource constraints I continue otherwise. ^[After continually running the entire analysis, a EGARCH(2,2) S&P 500 process in-conjunction with a GJR-GARCH(1,1) individual security process produces the lowest error rate; I remain with the EGARCH process however, given the robust diagnostic checks]
+
+Analysis: Multivariate Dynamic Conditional Correlations
 ============
 
-Now that i have finished estimating univariate variances, I am ready to incorporate this information into a multivariate DCC model. Although I had considered asymmetric variance dynamics in the previous EGARCH estimations, I discard an aDCC model due to its insignificant coefficients and non-intuitive understanding. 
+With the estimated univariate EGARCH(2,2) and EGARCH(1,1) models, I am ready to incorporate the asymmetric conditional variance into a multivariate dynamically conditioned vector auto-regression (VAR). Intuitively, when the S&P 500 index and individual security move in the same direction, as measured by variance and returns, the correlation increases slightly. The opposite holds if both the index and security move in opposite directions. As with variance estimations, correlations are assumed to only temporarily deviate from a long run mean—as indicated by the omega parameter.  Further, given asymmetry in the correlation dynamics, these increased(decreased) correlations should be exacerbated in economic up(down) turns.
 
-"Include Equation description here""
+Thus, I consider both a DCC and an ADCC (asymmetric) VAR:
 
-Diagnostic checking here indicates that a mulitvariate DCC(1,1) model is the most suitable for this process, while higher orders models appear to have comproable BIC/AIC scores, and better fit to the skewed, non-normal data-- the higher order coefficients are insignicant and I fear that I risk overfitting at this point. 
+\[\rho_{t} = \bar\rho(1-\alpha-\beta)+\alpha z_{1,t-1}z_{2,t-1} + \beta\rho_{t-1}\]
 
-After fitting the model, I construct the correlation matrix and terminate the parralel cluster.
+\[\rho_{t} = \omega + \alpha z_{1,t-1}z_{2,t-1} + \gamma z_{1,t-1}z_{2,t-1}+(I_{z_{1t}<0})(I_{z_{2t}<0})+\beta\rho_{t-1}\]
+
+Diagnostic checks indicate that the asymmetric correlation term is insignificant for most pairs; I discard the ADCC model. Through AIC/BIC selection criteria, I determine that a DCC(1,1) model is most appropriate for the data.^[While higher order DCC models have comparable AIC/BIC scores and decreased residual errors, the higher order lagged coefficients are deemed insignificant. With caution towards over-fitting, I hold a DCC(1,1) process.]
+
+After fitting the model, I aggregate the correlation list into a matrix and terminate the parallel cluster.  
 
 ```{r analysis1.4, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
 
@@ -353,11 +341,11 @@ timevarcor[,n] <- corrmatrix
 stopCluster(cl) 
 ```
 
-```{r analysis232011, echo=FALSE, eval=TRUE, include=TRUE, fit.center=TRUE}
+```{r analysis232011, echo=FALSE, eval=TRUE, include=TRUE, fig.align='center', cache=TRUE}
 plot(dcc, which=4)
 ```
 
-A mulivariate DCC(1,1) indicates that most coefficients are significant, although I believe I have spurious estimations for the X1/X2 Beta1 coefficient. Individaul secruity coefficients appear to be weaker (X2 variables) than the coefficients fit for the S&P 500.
+Upon inspection, the multivariate DCC(1,1) VAR formed from a EGARCH(1,1) and EGARCH(2,2) process yields mostly significant coefficients. As previously discussed, several coefficients appear insignificant. Otherwise, the model appears to capture the dynamically conditioned correlation well.
 
 ```{r analysis-check454, echo=FALSE, include=TRUE}
 
@@ -366,13 +354,9 @@ knitr::kable(table3)
 
 ```
 
-Analysis: Evaluation
+Analysis: Portfolio Evaluation I
 ============
-After computing the time varying correlations for all 474 secruites, I now select the ten-most correlated (to S&P 500) secruites for each day. And for each day I average each secruity's return to form my daily profolio. This is a rather naive approach; I am essentially equally weighting each secruity under the hope that it will accurately mirror the S&P 500 returns. A more pragmatic approach would be to optimze the weighting of the profolio given the intrinsic characteristics of the profolio. 
-
-I now have a vector of profolio returns for each day in my 10-year sample. I compare this to the S&P 500 benchmark and calculate the residual error. This is stored in the eval$error vector.
-
-To note, this estimation is biased. I have constructed a profolio where each day has perfect information on the current period and all proceeding periods; in short, I have not implemented a rolling window cross validation technique to determine out-of-sample R2. My model should be over-fit to this in-sample data. However, as a proof-of-concept this is adequate; further adoptations of this forecast would implement the aforementioned rolling window CV technique and use information at time t in order to forecast on returns in time t+1.
+From the 20MB csv file containing the dynamically conditioned time varying correlation for all 474 securities, I select the ten-most correlated securities (to the S&P 500) for each period. Put another way, for each period in the sample, I select the ten-most correlated securities; the ten-most correlated securities then form the mimicking portfolio. I lookup the returns for each security per period and equally weight each individual security's return against the entire portfolio. This is a rather naive approach; I am essentially equally weighting each security under the assumption that the overall portfolio will mirror the S&P 500's returns well. A more pragmatic approach would be to optimally weight each individual security's return based upon some intrinsic property—say regime or security characteristic. 
 
 ```{r analysis1.5, fig.margin = TRUE, cache=TRUE, eval=FALSE, results="hide", include=TRUE}
 
@@ -396,26 +380,30 @@ eval$error <- eval$SP500 - eval$benchmark
 
 ```
 
-Analysis: Final Results
+I now have a vector of portfolio returns for each period in the 10-year sample. I directly compare the performance and error^[The eval$error vector stores the difference between the returns from the portfolio and the S&P 500, IE the 'residual' error] of this portfolio to the S&P 500 index. 
+
+Analysis: Portfolio Evaluation II
 ============
 
-```{r analysis23223d011, echo=FALSE, eval=TRUE, include=TRUE}
+```{r analysis23223d011, echo=FALSE, eval=TRUE, include=TRUE, fig.height=9, message=FALSE}
 #Visual Representation
+library(ggplot2)
+library(gridExtra)
 plot1 <-	ggplot() + 
-			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
-			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue') +
+			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick', na.rm=TRUE) +
+			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue', na.rm=TRUE) +
 				ggtitle("Top-10 Profolio Superimposed on SP500") + theme(plot.title = element_text(lineheight=.8, face="bold")) +
 				labs(color = "Legend") + 
 				xlab('Date') +
 				ylab('Price Levels')
 
-plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick', na.rm=TRUE) +
 				ggtitle("SP500") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
 				labs(color = "Legend") + 
 				xlab('Date') +
 				ylab('Price Levels')
 
-plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue') +
+plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue', na.rm=TRUE) +
 				ggtitle("Top-10 Correlated Secruities") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
 				labs(color = "Legend") + 
 				xlab('Date') +
@@ -424,26 +412,28 @@ plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 
 grid.arrange(plot1,plot2, plot3, ncol=1)
 ```
 
-Given a basket of ten secruites, the constructed profolio adequately mimicks the returns of the S&P 500. The bottommost chart displays the constructed profolio, the middle graph displays S&P 500 returns, and the topmost chart shows the returns of the top 10 correlated secruties superimposed on the returns of the S&P500
+The constructed portfolio adequately mimics the returns of the S&P 500; the bottommost graph displays the constructed returns. The middle graph displays the S&P 500 returns. And the topmost graph displays the portfolio returns superimposed against the S&P 500 returns. The EGARCH DCC VAR selected portfolio adequately mirrors the S&P 500 benchmark; however, during regimes of high volatility the residual errors are far greater than during periods of relatively tranquility. This is rather intuitive, correlation and variance are tough to estimate during highly unpredictably periods. 
 
-While the S&P 500 is less variable, read less risky, this is expected. In fact, I have distilled an index of 500 secruites to 10; it should be no surprise that the constructed profolio has more variance.
+I now  quantify the accuracy of the tracking portfolio via a Sharpe Ratio:
 
-```{r analysis23223011, echo=FALSE, eval=TRUE, include=TRUE}
-errors <- eval$error[c(1:5, 100:110)]
-knitr::kable(errors)
+\[S_a = \frac{E[R_a-R_b]}{\sqrt{\mathrm{var}[R_a-R_b]}} * \sqrt{N}\]
+
+Where N = 221 (number of trading days), Ra = average return, and Rb = risk free rate
+
+The daily annualized Sharpe Ratio of the S&P 500 Index over a 10-year sample is 0.2052 while the daily annualized Sharpe Ratio of the tracking portfolio is 0.2017. Given that the objective is to mimic the  daily returns of the S&P 500 (without considering volatility), it is unsurprising that the tracking portfolio performed worse. The benefits of diversification are lesser in a ten security portfolio.
+
+I now consider the performance of the tracking portfolio as compared to the S&P 500, namely:
+
+\[0.05958 = \frac{E[0.0002585-0.0001821]}{\sqrt{\mathrm{var}[0.0002585-0.0001821]}} * \sqrt{221}\]
+
+Where, Ra= average return of formed portfolio, and Rb = average return of S&P 500 benchmark
+
+The tracking portfolio, after considering returns and volatility, inadvertently outperforms the S&P 500 index. 
+Finally, I construct a loosely defined Sum of Square Residuals (SSR) metric. While this metric is not valuable in isolation—one must re-run the entire analysis and vary model parameters to achieve insight  —one can use it to compare across models. Given a multivariate DCC(1,1) ~N(0,1) with univariate EGARCH(2,2) ~N(0,1) and EGARCH(1,1) ~N(0,1) process I achieve an 'SSR' of 0.1836. ^[Given multivariate DCC(1,1) ~N(0,1) with either univariate GJR-GARCH(2,2) ~STD(0,1) and GJR-GARCH(1,1) ~STD(0,1) or GARCH(2,2) ~N(0,1) and GARCH(1,1) ~N(0,1) this 'SSR' reveals 0.1654 and 0.2043, respectively.]
+
+```{r analysis2311, echo=TRUE, eval=TRUE, include=TRUE}
 sum(((eval$error) ** 2), na.rm=TRUE)
 ```
-
-During low-variance regimes, the profolio's errors are much lower than during high volatility regimes. The unpredictability during those time periods is especially prononounced and one can see signicant errors during the early to mid 2009.
-
-```{r analysis2311, echo=FALSE, eval=TRUE, include=TRUE}
-sum(((eval$error) ** 2), na.rm=TRUE)
-```
-And although not valuable when compared in isolation (one must vary the models are compare use this metric as a comparision), we observe loosely defined 'SSR' of 0.1836 ^[Given GRJ-GARCH and sGARCH models, this statistic indicates: 0.1654 and 0.2043, respectively]
-
-Conclusion
-===================
-Talk about naive weighting, introduce variable weighting, better model estimatoin, automatiion of GARCH selection (1,1) assumption, higher order DCC model? 
 
 Appendix
 ===================
@@ -547,8 +537,8 @@ remove_outliers <- function(x, na.rm = TRUE, ...) {
 SecruityCleaner <- function(name, days){
 
 # Description
-# This utility script removes non-trading days from SecruityScraper and imputes missing values with 
-  #the nearest value 
+# This utility script removes non-trading days from SecruityScraper and imputes 
+  #missing values with the nearest value 
 
 # Arguments
 #'name' is the name of a csv file containing stock symbols to download #do not include .csv
@@ -588,7 +578,9 @@ for(n in 2:(L-1)){
 					  message("Remove (not enough observations): ", n)
 						raw <- raw[,-c(n)]
 		}
-	}, error=function(e)	{#as columns are strunk, n becomes larger than initial column number set and produces errors at the end
+	}, error=function(e)	{
+	  #as columns are strunk, n becomes larger than initial column number set 
+	  #and produces errors at the end
 	cat("ERROR(expected) :",conditionMessage(e), "\n")
 	})
 
@@ -601,8 +593,10 @@ end <- dim(raw)[1]
 #Impute missing price levels with nearest price level
 for(n in 2:L){
 
-raw[1,n] <- ifelse(is.na(raw[1,n])==TRUE, na.locf(raw[,n])[1], raw[1,n]) #place value in first 
-raw[end,n] <- ifelse(is.na(raw[end,n])==TRUE, na.locf(raw[,n])[end], raw[end,n]) #place value in last
+#place value in first 
+raw[1,n] <- ifelse(is.na(raw[1,n])==TRUE, na.locf(raw[,n])[1], raw[1,n]) 
+#place value in last
+raw[end,n] <- ifelse(is.na(raw[end,n])==TRUE, na.locf(raw[,n])[end], raw[end,n]) 
 raw[,n] <- na.locf(raw[,n] ,fromlast=TRUE) # scrub NA from backwards
 message("Imputing missing values with nearest value: ", n)
 
@@ -672,7 +666,8 @@ rownames(rtrn) <- sp$Date[-1]
 
 #Method 1 Compute Correlation Matrix
 L <- dim(rtrn)[2]-2 #all secruities minus SP500 and dates
-timevarcor <- matrix(ncol=L, nrow=dim(rtrn)[1]-2) #Create data.frame for time conditional variance
+ #Create data.frame for time conditional variance
+timevarcor <- matrix(ncol=L, nrow=dim(rtrn)[1]-2)
 colnames(timevarcor) <- head(colnames(rtrn), -2) #all secruites minus SP500 and dates
 rownames(timevarcor) <- head(rtrn$Date,-2)
 
@@ -697,14 +692,18 @@ for(n in 1:L){
 								distribution.model= "norm")
 		
 		#Fit GARCH models
-		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), cluster=cl)
-		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), cluster=cl), silent=TRUE)
+		garch1 <- ugarchfit(spec=spec1, data=moddata[,1], solver.control = list(trace=0), 
+		                    cluster=cl)
+		garch2 <- try(ugarchfit(spec=spec2, data=moddata[,2], solver.control = list(trace=0), 
+		                        cluster=cl), silent=TRUE)
 
 		#Build parameters for DCC model 
-		dccspec <- dccspec(VAR=TRUE, uspec = multispec(c(spec1, spec2)), dccOrder = c(1,1), distribution = "mvnorm")
+		dccspec <- dccspec(VAR=TRUE, uspec = multispec(c(spec1, spec2)), dccOrder = c(1,1), 
+		                   distribution = "mvnorm")
 
 		#Fit DCC model
-		dcc <- try(dccfit(dccspec, data = moddata, fit.control=list(scale=TRUE), cluster=cl), silent=TRUE)
+		dcc <- try(dccfit(dccspec, data = moddata, fit.control=list(scale=TRUE), 
+		                  cluster=cl), silent=TRUE)
 
 		tryCatch({
 
@@ -722,8 +721,10 @@ for(n in 1:L){
 
 stopCluster(cl)
 
-top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
-low10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=FALSE),10)))
+top10names <- apply(timevarcor[,-1], MARGIN=1, 
+                    FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
+low10names <- apply(timevarcor[,-1], MARGIN=1, 
+                    FUN=function(x) names(head(sort(x, decreasing=FALSE),10)))
 
 #Compare returns against SP&500 Returns
 L <- dim(top10names)[2]
@@ -741,21 +742,27 @@ eval$error <- eval$SP500 - eval$benchmark
 
 #Visual Representation
 plot1 <-	ggplot() +
-			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
-			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), alpha=0.4, color='slateblue') +
-				ggtitle("Benchmark Superimposed on SP500") + theme(plot.title = element_text(lineheight=.8, face="bold")) +
+			geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), 
+			          color='firebrick') +
+			geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), 
+			          alpha=0.4, color='slateblue') +
+				ggtitle("Benchmark Superimposed on SP500") + 
+                theme(plot.title = element_text(lineheight=.8, face="bold")) +
 				labs(color = "Legend") +
 				xlab('Date') +
 				ylab('Price Levels')
 
-plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), color='firebrick') +
+plot2 <- ggplot() + geom_line(data = eval, aes(x = Date, y = SP500, color = 'SP500'), 
+                              color='firebrick') +
 				ggtitle("SP500") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
 				labs(color = "Legend") +
 				xlab('Date') +
 				ylab('Price Levels')
 
-plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, color = 'Benchmark'), color='slateblue') +
-				ggtitle("Top 10 Correlated Secruities") + theme(plot.title = element_text(lineheight=.4, face="bold")) +
+plot3 <- ggplot() + geom_line(data = eval, aes(x = Date, y = benchmark, 
+                                    color = 'Benchmark'), color='slateblue') +
+				ggtitle("Top 10 Correlated Secruities") + 
+                            theme(plot.title = element_text(lineheight=.4, face="bold")) +
 				labs(color = "Legend") +
 				xlab('Date') +
 				ylab('Price Levels')
