@@ -36,7 +36,7 @@ source("secruitycleaner.R")
 setwd(datdir)
 
 #Read in list of stocks on S&P 500 & get their data
-#SecruityScraper(name="SP500", startdate=startdate, enddate=enddate, type="WIKI", key="R5aou_vNYxLJjqscyBUg", sleep=0)
+#SecruityScraper(name="SP500", startdate=startdate, enddate=enddate, type="WIKI", key="xxxx", sleep=0)
 
 #Clean data and remove non-observations
 #SecruityCleaner(name="SP500", days=144)
