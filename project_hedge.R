@@ -83,10 +83,10 @@ for(n in 1:L){
 		moddata <- data.frame(moddata)
 
 		#Build parameters for market GARCH
-		spec1 <- ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(2,2)),
+		spec1 <- ugarchspec(variance.model = list(model = "EGARCH", garchOrder = c(2,2)),
 								distribution.model= "norm")
 		#Build parameters for secruity GARCH
-		spec2 <- ugarchspec(variance.model = list(model = "gjrGARCH", garchOrder = c(1,1)),
+		spec2 <- ugarchspec(variance.model = list(model = "EGARCH", garchOrder = c(1,1)),
 								distribution.model= "norm")
 		
 		#Fit GARCH models
@@ -119,10 +119,9 @@ stopCluster(cl)
 setwd(datdir)
 
 ##Save Output
-setwd(datdir)
 #write.csv(timevarcor, file = "varying-corr.csv")
-#timevarcor <- as.matrix(read.csv("varying-corr.csv"))
-#rownames(timevarcor) <- timevarcor[,1]
+timevarcor <- as.matrix(read.csv("varying-corr.csv"))
+rownames(timevarcor) <- timevarcor[,1]
 
 #Find top 10 correlated secruities #[,-1] removes date column
 top10names <- apply(timevarcor[,-1], MARGIN=1, FUN=function(x) names(head(sort(x, decreasing=TRUE),10)))
@@ -136,7 +135,7 @@ eval$benchmark <- NA
 for(n in 1:L){
 	date <- names(top10names[1,n])
 	topstocks <- as.character(top10names[,n])
-	lowstocks <- as.character(low10names[,n])
+	#lowstocks <- as.character(low10names[,n])
 
 	eval$benchmark[n] <- mean(as.numeric(rtrn[date,topstocks]))
 }
@@ -175,3 +174,4 @@ sum(((eval$error) ** 2), na.rm=TRUE)
 #sum of errors for single grjGARCH(2,2) 0.1773
 #sum of errors for double w/ snorm  grjGARCH(2,2) 0.1681
 #sum of errors for double w/ std  grjGARCH(1,1) 0.1689
+#(Mean portfolio return − Risk-free rate)/Standard deviation of portfolio retur
